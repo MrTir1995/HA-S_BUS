@@ -3,17 +3,65 @@
     "step": {
       "user": {
         "title": "SAIA S-Bus Setup",
-        "description": "Configure your SAIA PCD controller connection.",
+        "description": "Select the S-Bus protocol variant for your SAIA PCD controller.",
         "data": {
+          "protocol_type": "Protocol Type"
+        },
+        "data_description": {
+          "protocol_type": "Choose the S-Bus protocol variant based on your connection type"
+        }
+      },
+      "ether_sbus": {
+        "title": "Ether-S-Bus Configuration",
+        "description": "Configure connection via Ether-S-Bus (UDP/TCP over Ethernet).",
+        "data": {
+          "connection_type": "Connection Type",
           "host": "Host (IP Address or Hostname)",
           "port": "Port",
           "station": "Station Address (0-253)",
           "scan_interval": "Scan Interval (seconds)"
         },
         "data_description": {
+          "connection_type": "UDP (standard) or TCP connection",
           "host": "IP address or hostname of the SAIA PCD controller",
-          "port": "UDP port for S-Bus communication (default: 5050)",
+          "port": "UDP/TCP port for S-Bus communication (default: 5050)",
           "station": "S-Bus station address of the target device",
+          "scan_interval": "How often to poll the device for updates"
+        }
+      },
+      "serial_sbus": {
+        "title": "Serial-S-Bus Configuration",
+        "description": "Configure connection via Serial-S-Bus (RS-232/RS-485 or TCP serial bridge). For serial port: e.g., /dev/ttyUSB0. For TCP serial bridge: e.g., 192.168.1.100:5050",
+        "data": {
+          "connection_type": "Connection Type",
+          "serial_port": "Serial Port or TCP Address",
+          "baudrate": "Baud Rate",
+          "station": "Station Address (0-253)",
+          "scan_interval": "Scan Interval (seconds)"
+        },
+        "data_description": {
+          "connection_type": "USB/Serial or TCP serial bridge",
+          "serial_port": "Serial port path (e.g., /dev/ttyUSB0) or TCP address (host:port)",
+          "baudrate": "Serial communication baud rate",
+          "station": "S-Bus station address of the target device",
+          "scan_interval": "How often to poll the device for updates"
+        }
+      },
+      "profi_sbus": {
+        "title": "Profi-S-Bus Configuration",
+        "description": "Configure connection via Profi-S-Bus (Profibus gateway).",
+        "data": {
+          "host": "Gateway Host (IP Address or Hostname)",
+          "port": "Gateway Port",
+          "station": "Station Address (0-253)",
+          "profibus_address": "Profibus Address (0-126)",
+          "scan_interval": "Scan Interval (seconds)"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the Profibus gateway",
+          "port": "TCP port of the Profibus gateway",
+          "station": "S-Bus station address of the target device",
+          "profibus_address": "Profibus node address",
           "scan_interval": "How often to poll the device for updates"
         }
       },
@@ -29,15 +77,18 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the device. Please check the host and port.",
+      "cannot_connect": "Failed to connect to the device. Please check the connection settings.",
       "invalid_auth": "Invalid station address or device not responding.",
-      "timeout": "Connection timeout. Please check your network connection.",
+      "timeout": "Connection timeout. Please check your network connection and device availability.",
       "crc_error": "CRC validation error. Data corruption detected.",
+      "serial_port_not_found": "Serial port not found. Please check the port path and permissions.",
+      "invalid_protocol": "Invalid protocol type selected.",
       "unknown": "An unexpected error occurred. Please check the logs."
     },
     "abort": {
       "already_configured": "This device is already configured.",
-      "reconfigure_successful": "Configuration updated successfully."
+      "reconfigure_successful": "Configuration updated successfully.",
+      "reconfigure_failed": "Reconfiguration failed. Please try again."
     }
   },
   "options": {

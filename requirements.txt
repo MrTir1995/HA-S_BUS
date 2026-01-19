@@ -1,5 +1,6 @@
 # Production dependencies
 homeassistant>=2024.1.0
+pyserial-asyncio==0.6
 
 # Required for development
 aiohttp>=3.9.0

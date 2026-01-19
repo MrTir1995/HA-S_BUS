@@ -30,8 +30,8 @@ from .const import SERVICE_READ_REGISTER
 from .const import SERVICE_WRITE_FLAG
 from .const import SERVICE_WRITE_REGISTER
 from .coordinator import SBusDataUpdateCoordinator
-from .sbus_protocol import SBusProtocol
 from .sbus_protocol import SBusProtocolError
+from .sbus_protocol import create_sbus_protocol
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,13 +40,11 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.S
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up SAIA S-Bus from a config entry."""
-    host = entry.data[CONF_HOST]
-    port = entry.data[CONF_PORT]
-    station = entry.data.get(CONF_STATION, DEFAULT_STATION)
+    # Get scan interval from entry data
     scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
 
-    # Create S-Bus protocol instance
-    protocol = SBusProtocol(host, port, station)
+    # Create S-Bus protocol instance using factory
+    protocol = create_sbus_protocol(entry.data)
 
     try:
         # Connect to device
@@ -56,14 +54,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         device_info = await protocol.get_device_info()
 
         _LOGGER.info(
-            "Connected to S-Bus device: %s (S/N: %s)",
+            "Connected to S-Bus device: %s (S/N: %s) via %s",
             device_info.get("product_type", "Unknown"),
             device_info.get("serial_number", "Unknown"),
+            entry.data.get("protocol_type", "Ether-S-Bus"),
         )
 
     except SBusProtocolError as err:
         await protocol.disconnect()
-        msg = f"Failed to connect to S-Bus device at {host}:{port}"
+        protocol_info = entry.data.get("protocol_type", "S-Bus")
+        connection_info = entry.data.get(CONF_HOST, entry.data.get("serial_port", "device"))
+        msg = f"Failed to connect to {protocol_info} device at {connection_info}"
         raise ConfigEntryNotReady(msg) from err
 
     # Create data update coordinator

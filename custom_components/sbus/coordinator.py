@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
-from .sbus_protocol import SBusProtocol
+from .sbus_protocol import SBusProtocolBase
 from .sbus_protocol import SBusProtocolError
 from .sbus_protocol import SBusTimeoutError
 
@@ -27,14 +27,14 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def __init__(
         self,
         hass: HomeAssistant,
-        protocol: SBusProtocol,
+        protocol: SBusProtocolBase,
         scan_interval: int,
     ) -> None:
         """Initialize the coordinator.
 
         Args:
             hass: Home Assistant instance
-            protocol: S-Bus protocol handler
+            protocol: S-Bus protocol handler (any protocol variant)
             scan_interval: Update interval in seconds
 
         """

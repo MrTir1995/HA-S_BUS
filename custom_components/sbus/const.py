@@ -10,12 +10,32 @@ CONF_HOST: Final = "host"
 CONF_PORT: Final = "port"
 CONF_STATION: Final = "station"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
+CONF_PROTOCOL_TYPE: Final = "protocol_type"
+CONF_SERIAL_PORT: Final = "serial_port"
+CONF_BAUDRATE: Final = "baudrate"
+CONF_CONNECTION_TYPE: Final = "connection_type"
+
+# Protocol types
+PROTOCOL_ETHER_SBUS: Final = "ether_sbus"
+PROTOCOL_SERIAL_SBUS: Final = "serial_sbus"
+PROTOCOL_PROFI_SBUS: Final = "profi_sbus"
+
+# Connection types for Serial-S-Bus
+CONNECTION_TYPE_USB: Final = "usb"
+CONNECTION_TYPE_TCP_SERIAL: Final = "tcp_serial"
+CONNECTION_TYPE_TCP: Final = "tcp"
+CONNECTION_TYPE_UDP: Final = "udp"
 
 # Default values
-DEFAULT_PORT: Final = 5050
+DEFAULT_PORT_UDP: Final = 5050
+DEFAULT_PORT_TCP: Final = 5050
 DEFAULT_STATION: Final = 0
 DEFAULT_SCAN_INTERVAL: Final = 30
 DEFAULT_TIMEOUT: Final = 5
+DEFAULT_BAUDRATE: Final = 9600
+
+# Available baudrates for Serial-S-Bus
+BAUDRATES: Final = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200]
 
 # S-Bus Protocol Constants
 SBUS_FRAME_START: Final = 0xB5
@@ -71,17 +91,14 @@ MAX_REGISTER_VALUE: Final = 0xFFFFFFFF
 MAX_FLAG_COUNT: Final = 1024
 MAX_STATION_ADDRESS: Final = 253
 
-# Connection types
-CONNECTION_TYPE_UDP: Final = "udp"
-CONNECTION_TYPE_TCP: Final = "tcp"
-CONNECTION_TYPE_RTU: Final = "rtu"
-
 # Error messages
 ERROR_CANNOT_CONNECT: Final = "cannot_connect"
 ERROR_INVALID_AUTH: Final = "invalid_auth"
 ERROR_UNKNOWN: Final = "unknown"
 ERROR_TIMEOUT: Final = "timeout"
 ERROR_CRC_ERROR: Final = "crc_error"
+ERROR_SERIAL_PORT_NOT_FOUND: Final = "serial_port_not_found"
+ERROR_INVALID_PROTOCOL: Final = "invalid_protocol"
 
 # Attributes
 ATTR_ADDRESS: Final = "address"
