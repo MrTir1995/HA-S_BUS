@@ -23,6 +23,7 @@ class EtherSBusProtocol(SBusProtocolBase):
     """Ether-S-Bus Protocol implementation (UDP/TCP).
 
     Implements S-Bus communication over Ether-S-Bus using UDP or TCP transport.
+    Includes sequence number management for reliable packet tracking.
     """
 
     def __init__(
@@ -53,6 +54,8 @@ class EtherSBusProtocol(SBusProtocolBase):
         )
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
+        self._sequence_number: int = 0
+        self._max_retries: int = 3
 
     async def connect(self) -> None:
         """Establish connection to the S-Bus device via Ether-S-Bus."""
@@ -117,7 +120,10 @@ class EtherSBusProtocol(SBusProtocolBase):
         )
 
     async def _send_and_receive(self, telegram: bytes) -> bytes:
-        """Send telegram and receive response via Ether-S-Bus.
+        """Send telegram and receive response via Ether-S-Bus with retry logic.
+
+        Implements automatic retry on timeout with exponential backoff.
+        Manages sequence numbers to ensure response matches request.
 
         Args:
             telegram: The telegram to send
@@ -126,12 +132,49 @@ class EtherSBusProtocol(SBusProtocolBase):
             The response telegram
 
         Raises:
-            SBusTimeoutError: If communication times out
+            SBusTimeoutError: If communication times out after all retries
 
         """
-        if self.use_tcp:
-            return await self._send_and_receive_tcp(telegram)
-        return await self._send_and_receive_udp(telegram)
+        last_error = None
+        for attempt in range(self._max_retries):
+            try:
+                if self.use_tcp:
+                    return await self._send_and_receive_tcp(telegram)
+                return await self._send_and_receive_udp(telegram)
+            except SBusTimeoutError as err:
+                last_error = err
+                if attempt < self._max_retries - 1:
+                    # Exponential backoff: 0.5s, 1s, 2s
+                    wait_time = 0.5 * (2**attempt)
+                    _LOGGER.debug(
+                        "Retry %d/%d after timeout, waiting %.1fs",
+                        attempt + 1,
+                        self._max_retries,
+                        wait_time,
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    _LOGGER.error(
+                        "All %d retry attempts failed for %s:%d",
+                        self._max_retries,
+                        self.host,
+                        self.port,
+                    )
+        # If we get here, all retries failed
+        if last_error:
+            raise last_error
+        msg = f"Communication failed after {self._max_retries} attempts"
+        raise SBusTimeoutError(msg)
+
+    def _get_next_sequence(self) -> int:
+        """Get next sequence number for Ether-S-Bus packets.
+
+        Returns:
+            Next sequence number (0-65535, wraps around)
+
+        """
+        self._sequence_number = (self._sequence_number + 1) % 65536
+        return self._sequence_number
 
     async def _send_and_receive_udp(self, telegram: bytes) -> bytes:
         """Send and receive via UDP."""

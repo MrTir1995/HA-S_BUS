@@ -363,7 +363,10 @@ class SBusProtocolBase(ABC):
 
     @staticmethod
     def calculate_crc(data: bytes) -> int:
-        """Calculate CRC-16-CCITT checksum.
+        """Calculate CRC-16-CCITT checksum for S-Bus.
+
+        Uses CRC-16-CCITT with polynomial 0x1021 and initial value 0x0000
+        as specified in the S-Bus protocol documentation.
 
         Args:
             data: Data to calculate CRC for
@@ -372,7 +375,7 @@ class SBusProtocolBase(ABC):
             CRC-16 checksum
 
         """
-        crc = 0xFFFF
+        crc = 0x0000  # S-Bus uses 0x0000 as initial value, not 0xFFFF
 
         for byte in data:
             crc = ((crc << 8) & 0xFFFF) ^ SBusProtocolBase.CRC16_TABLE[
@@ -593,44 +596,87 @@ class SBusProtocolBase(ABC):
             self._validate_telegram(response)
 
     async def get_device_info(self) -> dict[str, Any]:
-        """Get device information.
+        """Get comprehensive device information.
 
         Returns:
-            Dictionary with device information
+            Dictionary with device information including:
+            - firmware_version: Firmware version number
+            - product_type: Product name (e.g., "PCD3.M5540")
+            - hw_version: Hardware version number
+            - serial_number: Device serial number
+            - firmware_version_str: Formatted firmware version
+            - hw_version_str: Formatted hardware version
 
         Raises:
             SBusTimeoutError: If communication times out
             SBusProtocolError: For protocol errors
 
         """
-        # Read firmware version
-        firmware_raw = await self.read_registers(SYSREG_FIRMWARE, 1)
-        firmware_version = firmware_raw[0]
+        try:
+            # Read firmware version
+            firmware_raw = await self.read_registers(SYSREG_FIRMWARE, 1)
+            firmware_version = firmware_raw[0]
 
-        # Read product type (4 registers, ASCII string)
-        product_type_raw = await self.read_registers(
-            SYSREG_PRODUCT_TYPE_START,
-            SYSREG_PRODUCT_TYPE_END - SYSREG_PRODUCT_TYPE_START + 1,
-        )
-        product_type_bytes = b"".join(
-            struct.pack("!I", reg) for reg in product_type_raw
-        )
-        product_type = product_type_bytes.decode("ascii").strip("\x00")
+            # Read product type (4 registers, ASCII string)
+            product_type_raw = await self.read_registers(
+                SYSREG_PRODUCT_TYPE_START,
+                SYSREG_PRODUCT_TYPE_END - SYSREG_PRODUCT_TYPE_START + 1,
+            )
+            product_type_bytes = b"".join(
+                struct.pack("!I", reg) for reg in product_type_raw
+            )
+            product_type = product_type_bytes.decode("ascii", errors="ignore").strip("\x00")
 
-        # Read hardware version
-        hw_version_raw = await self.read_registers(SYSREG_HW_VERSION, 1)
-        hw_version = hw_version_raw[0]
+            # Read hardware version
+            hw_version_raw = await self.read_registers(SYSREG_HW_VERSION, 1)
+            hw_version = hw_version_raw[0]
 
-        # Read serial number (2 registers)
-        serial_raw = await self.read_registers(
-            SYSREG_SERIAL_START,
-            SYSREG_SERIAL_END - SYSREG_SERIAL_START + 1,
-        )
-        serial_number = f"{serial_raw[0]:08X}{serial_raw[1]:08X}"
+            # Read serial number (2 registers)
+            serial_raw = await self.read_registers(
+                SYSREG_SERIAL_START,
+                SYSREG_SERIAL_END - SYSREG_SERIAL_START + 1,
+            )
+            serial_number = f"{serial_raw[0]:08X}{serial_raw[1]:08X}"
 
-        return {
-            "firmware_version": firmware_version,
-            "product_type": product_type,
-            "hw_version": hw_version,
-            "serial_number": serial_number,
-        }
+            # Format version strings for better readability
+            firmware_version_str = self._format_version(firmware_version)
+            hw_version_str = self._format_version(hw_version)
+
+            return {
+                "firmware_version": firmware_version,
+                "product_type": product_type if product_type else "SAIA PCD",
+                "hw_version": hw_version,
+                "serial_number": serial_number,
+                "firmware_version_str": firmware_version_str,
+                "hw_version_str": hw_version_str,
+            }
+        except Exception as err:
+            _LOGGER.error("Failed to read device information: %s", err)
+            # Return minimal info if read fails
+            return {
+                "firmware_version": 0,
+                "product_type": "SAIA PCD (Unknown)",
+                "hw_version": 0,
+                "serial_number": "UNKNOWN",
+                "firmware_version_str": "Unknown",
+                "hw_version_str": "Unknown",
+            }
+
+    @staticmethod
+    def _format_version(version: int) -> str:
+        """Format version number to readable string.
+
+        Args:
+            version: Raw version number
+
+        Returns:
+            Formatted version string (e.g., "1.23.45")
+
+        """
+        if version == 0:
+            return "Unknown"
+        # Version format: Major.Minor.Patch
+        major = (version >> 16) & 0xFF
+        minor = (version >> 8) & 0xFF
+        patch = version & 0xFF
+        return f"{major}.{minor}.{patch}"

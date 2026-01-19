@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING
@@ -19,6 +20,10 @@ from .sbus_protocol import SBusProtocolError
 from .sbus_protocol import SBusTimeoutError
 
 _LOGGER = logging.getLogger(__name__)
+
+# Connection health monitoring
+MAX_CONSECUTIVE_ERRORS = 3
+RECONNECT_DELAY = 5  # seconds
 
 
 class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -46,6 +51,8 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         self.protocol = protocol
         self._device_info: dict[str, Any] | None = None
+        self._consecutive_errors = 0
+        self._is_connected = False
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from S-Bus device.
@@ -58,6 +65,11 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         """
         try:
+            # Check if we need to reconnect
+            if not self._is_connected or self._consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                _LOGGER.info("Attempting to reconnect to S-Bus device...")
+                await self._async_reconnect()
+
             data: dict[str, Any] = {
                 "registers": {},
                 "flags": {},
@@ -89,14 +101,60 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             except SBusProtocolError as err:
                 _LOGGER.debug("Could not read flags: %s", err)
 
+            # Reset error counter on success
+            self._consecutive_errors = 0
+            self._is_connected = True
+
             return data
 
         except SBusTimeoutError as err:
+            self._consecutive_errors += 1
             msg = f"Timeout communicating with S-Bus device: {err}"
+            _LOGGER.warning(
+                "%s (consecutive errors: %d/%d)",
+                msg,
+                self._consecutive_errors,
+                MAX_CONSECUTIVE_ERRORS,
+            )
             raise UpdateFailed(msg) from err
         except SBusProtocolError as err:
+            self._consecutive_errors += 1
             msg = f"Error communicating with S-Bus device: {err}"
+            _LOGGER.warning(
+                "%s (consecutive errors: %d/%d)",
+                msg,
+                self._consecutive_errors,
+                MAX_CONSECUTIVE_ERRORS,
+            )
             raise UpdateFailed(msg) from err
+
+    async def _async_reconnect(self) -> None:
+        """Attempt to reconnect to the device.
+
+        Raises:
+            UpdateFailed: If reconnection fails
+
+        """
+        try:
+            # Close existing connection
+            await self.protocol.disconnect()
+
+            # Wait before reconnecting
+            await asyncio.sleep(RECONNECT_DELAY)
+
+            # Attempt to reconnect
+            await self.protocol.connect()
+            _LOGGER.info("Successfully reconnected to S-Bus device")
+
+            # Clear cached device info to refresh it
+            self._device_info = None
+            self._consecutive_errors = 0
+            self._is_connected = True
+
+        except Exception as err:
+            self._is_connected = False
+            _LOGGER.error("Failed to reconnect to S-Bus device: %s", err)
+            raise UpdateFailed(f"Reconnection failed: {err}") from err
 
     async def async_get_device_info(self) -> dict[str, Any]:
         """Get device information (cached).
@@ -108,3 +166,12 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._device_info is None:
             self._device_info = await self.protocol.get_device_info()
         return self._device_info
+
+    async def async_shutdown(self) -> None:
+        """Shutdown coordinator and close connections."""
+        _LOGGER.debug("Shutting down S-Bus coordinator")
+        try:
+            await self.protocol.disconnect()
+        except Exception as err:
+            _LOGGER.error("Error disconnecting protocol: %s", err)
+        self._is_connected = False

@@ -8,5 +8,24 @@
   "requirements": ["pyserial-asyncio==0.6"],
   "version": "0.2.0",
   "iot_class": "local_push",
-  "integration_type": "hub"
+  "integration_type": "hub",
+  "zeroconf": [
+    {
+      "type": "_http._tcp.local.",
+      "name": "saia*"
+    },
+    {
+      "type": "_sbus._tcp.local.",
+      "name": "*"
+    }
+  ],
+  "ssdp": [
+    {
+      "manufacturer": "SAIA",
+      "modelName": "PCD*"
+    },
+    {
+      "manufacturer": "Saia-Burgess"
+    }
+  ]
 }

@@ -65,6 +65,10 @@
           "scan_interval": "How often to poll the device for updates"
         }
       },
+      "discovery_confirm": {
+        "title": "Discovered SAIA PCD Device",
+        "description": "A SAIA PCD device was discovered on your network:\n\nDevice: {name}\nHost: {host}\n\nDo you want to configure this device?"
+      },
       "reconfigure": {
         "title": "Reconfigure SAIA S-Bus",
         "description": "Update the connection settings for your SAIA PCD controller.",
