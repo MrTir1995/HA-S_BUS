@@ -36,7 +36,7 @@ Diese Integration unterstützt SAIA PCD Steuerungen mit Ether-S-Bus Schnittstell
 2. Klicken Sie auf "Integrations"
 3. Klicken Sie auf das Menü (⋮) in der oberen rechten Ecke
 4. Wählen Sie "Custom repositories"
-5. Fügen Sie die Repository-URL hinzu: `https://github.com/MrTir1995/S-Bus_HA`
+5. Fügen Sie die Repository-URL hinzu: `https://github.com/MrTir1995/HA-S_BUS`
 6. Wählen Sie die Kategorie "Integration"
 7. Klicken Sie auf "ADD"
 8. Suchen Sie nach "SAIA S-Bus"
@@ -164,16 +164,16 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) f�
 
 Bei Problemen oder Fragen:
 
-- Öffnen Sie ein [Issue auf GitHub](https://github.com/MrTir1995/S-Bus_HA/issues)
+- Öffnen Sie ein [Issue auf GitHub](https://github.com/MrTir1995/HA-S_BUS/issues)
 - Diskutieren Sie im [Home Assistant Forum](https://community.home-assistant.io/)
 
 ---
 
-[commits-shield]: https://img.shields.io/github/commit-activity/y/MrTir1995/S-Bus_HA.svg?style=for-the-badge
-[commits]: https://github.com/MrTir1995/S-Bus_HA/commits/main
+[commits-shield]: https://img.shields.io/github/commit-activity/y/MrTir1995/HA-S_BUS.svg?style=for-the-badge
+[commits]: https://github.com/MrTir1995/HA-S_BUS/commits/main
 [hacs]: https://github.com/hacs/integration
 [hacsbadge]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge
-[license-shield]: https://img.shields.io/github/license/MrTir1995/S-Bus_HA.svg?style=for-the-badge
+[license-shield]: https://img.shields.io/github/license/MrTir1995/HA-S_BUS.svg?style=for-the-badge
 [maintenance-shield]: https://img.shields.io/badge/maintainer-MrTir1995-blue.svg?style=for-the-badge
-[releases-shield]: https://img.shields.io/github/release/MrTir1995/S-Bus_HA.svg?style=for-the-badge
-[releases]: https://github.com/MrTir1995/S-Bus_HA/releases
+[releases-shield]: https://img.shields.io/github/release/MrTir1995/HA-S_BUS.svg?style=for-the-badge
+[releases]: https://github.com/MrTir1995/HA-S_BUS/releases

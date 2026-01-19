@@ -8,7 +8,7 @@ Vielen Dank für Ihr Interesse, zu diesem Projekt beizutragen! 🎉
 
 Wenn Sie einen Bug gefunden haben:
 
-1. Prüfen Sie, ob der Bug bereits als [Issue](https://github.com/MrTir1995/S-Bus_HA/issues) gemeldet wurde
+1. Prüfen Sie, ob der Bug bereits als [Issue](https://github.com/MrTir1995/HA-S_BUS/issues) gemeldet wurde
 2. Falls nicht, erstellen Sie ein neues Issue mit:
    - Klarer Beschreibung des Problems
    - Schritten zur Reproduktion

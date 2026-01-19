@@ -23,8 +23,8 @@ classifiers = [
 ]
 
 [project.urls]
-"Bug Reports" = "https://github.com/MrTir1995/S-Bus_HA/issues"
-"Source" = "https://github.com/MrTir1995/S-Bus_HA"
+"Bug Reports" = "https://github.com/MrTir1995/HA-S_BUS/issues"
+"Source" = "https://github.com/MrTir1995/HA-S_BUS"
 
 [tool.setuptools]
 platforms = ["any"]

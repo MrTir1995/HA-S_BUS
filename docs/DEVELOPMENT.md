@@ -12,7 +12,7 @@
 
 1. **Repository klonen:**
    ```bash
-   git clone https://github.com/MrTir1995/S-Bus_HA.git
+   git clone https://github.com/MrTir1995/HA-S_BUS.git
    cd S-Bus_HA
    ```
 
@@ -225,5 +225,5 @@ data:
 
 Bei Fragen oder Problemen:
 
-- Öffnen Sie ein [Issue auf GitHub](https://github.com/MrTir1995/S-Bus_HA/issues)
+- Öffnen Sie ein [Issue auf GitHub](https://github.com/MrTir1995/HA-S_BUS/issues)
 - Diskutieren Sie im [Home Assistant Forum](https://community.home-assistant.io/)
