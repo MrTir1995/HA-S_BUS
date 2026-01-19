@@ -12,7 +12,49 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Automatische Erkennung aller verfügbaren Datenpunkte
 - Unterstützung für Timer und Counter Entitäten
 - Diagnostics Support
-- Serielle S-Bus Unterstützung (RS-485)
+
+## [0.3.0] - 2026-01-19
+
+### Hinzugefügt
+- **Multi-Protokoll Support**:
+  - Ether-S-Bus (UDP/TCP)
+  - Serial-S-Bus (RS-232/RS-485 über USB oder TCP-Seriell-Bridge)
+  - Profi-S-Bus (Profibus FDL Gateway)
+- **Auto-Discovery**:
+  - mDNS/Zeroconf Discovery (`_http._tcp.local.`, `_sbus._tcp.local.`)
+  - SSDP Discovery für SAIA-Geräte
+  - Automatischer Bestätigungsdialog mit vorausgefüllten Daten
+- **Connection Health Monitoring**:
+  - Automatische Wiederverbindung nach Verbindungsabbruch
+  - Tracking von aufeinanderfolgenden Fehlern
+  - Reconnect-Delay mit exponential backoff
+  - Graceful Shutdown beim Entladen der Integration
+- **Retry-Logik**:
+  - 3 Versuche bei Netzwerkfehlern
+  - Exponential Backoff (0.5s, 1s, 2s)
+  - Sequenznummern-Management für Ether-S-Bus
+- **Enhanced Device Info**:
+  - Formatierte Versionsstrings (Major.Minor.Patch)
+  - Erweiterte Fehlerbehandlung beim Auslesen
+  - Hardware-Version und Protokoll-Version
+
+### Behoben
+- **CRC-16 Berechnung**: Initialwert von 0xFFFF auf 0x0000 korrigiert (gemäß S-Bus Spezifikation)
+- Verbesserte Verbindungsstabilität durch Retry-Mechanismus
+- Device Info Parsing-Fehler behoben
+
+### Geändert
+- Config Flow jetzt mit Multi-Step für Protokollauswahl
+- Coordinator nutzt jetzt Health Monitoring
+- Verbesserte Logging-Ausgaben mit Fehler-Counter
+- `async_unload_entry` nutzt jetzt `coordinator.async_shutdown()`
+
+### Technische Details
+- Basis-Klasse `SBusProtocolBase` für alle Protokoll-Varianten
+- Factory Pattern in `sbus_protocol.py` für dynamische Instanziierung
+- pyserial-asyncio 0.6 Abhängigkeit für Serial-Support
+- Unterstützung für Baudraten 1200-115200
+- TCP-Seriell-Bridge Support (ser2net)
 
 ## [0.1.0] - 2026-01-19
 

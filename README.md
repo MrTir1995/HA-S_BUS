@@ -11,16 +11,21 @@
 
 ## 🌟 Features
 
-- **Ether-S-Bus Support**: Volle Unterstützung für S-Bus über UDP (Port 5050)
-- **Auto-Discovery**: Automatische Erkennung von PCD Steuerungen im Netzwerk
-- **Umfassende Datenpunkte**: Unterstützung für Register, Flags, Timer, Counter und mehr
-- **CRC-16 Validierung**: Sichere Datenübertragung mit Prüfsummen-Validierung
+- **Multi-Protokoll Support**: 
+  - **Ether-S-Bus**: UDP/TCP über Ethernet (Port 5050)
+  - **Serial-S-Bus**: RS-232/RS-485 über USB oder TCP-Seriell-Bridge
+  - **Profi-S-Bus**: Profibus FDL Gateway-Unterstützung
+- **Auto-Discovery**: Automatische Erkennung über mDNS/Zeroconf und SSDP
+- **Connection Health Monitoring**: Automatische Wiederverbindung bei Verbindungsabbrüchen
+- **Umfassende Datenpunkte**: Register, Flags, Timer, Counter, Data Blocks
+- **CRC-16 Validierung**: Sichere Datenübertragung gemäß S-Bus Spezifikation
+- **Retry-Logik**: Exponential Backoff bei Netzwerkfehlern
 - **Native Integration**: Nahtlose Integration in die Home Assistant UI
 - **Async/Await**: Moderne asynchrone Implementierung für beste Performance
 
 ## 📋 Unterstützte Geräte
 
-Diese Integration unterstützt SAIA PCD Steuerungen mit Ether-S-Bus Schnittstelle, einschließlich:
+Diese Integration unterstützt SAIA PCD Steuerungen mit S-Bus Schnittstelle, einschließlich:
 
 - PCD1.M2120, PCD1.M2160
 - PCD2.M480, PCD2.M5540
@@ -54,15 +59,39 @@ Diese Integration unterstützt SAIA PCD Steuerungen mit Ether-S-Bus Schnittstell
 1. Navigieren Sie zu **Einstellungen** → **Geräte & Dienste**
 2. Klicken Sie auf **+ Integration hinzufügen**
 3. Suchen Sie nach **SAIA S-Bus**
-4. Folgen Sie dem Einrichtungsassistenten:
-   - **Host**: IP-Adresse oder Hostname der PCD Steuerung
-   - **Port**: UDP-Port (Standard: 5050)
-   - **Station Adresse**: S-Bus Stationsadresse (0-253, Standard: 0)
-   - **Scan Intervall**: Abfrageintervall in Sekunden (Standard: 30)
+4. Wählen Sie das gewünschte Protokoll:
+
+#### Ether-S-Bus (UDP/TCP)
+- **Connection Type**: UDP (Standard) oder TCP
+- **Host**: IP-Adresse oder Hostname der PCD Steuerung
+- **Port**: UDP/TCP-Port (Standard: 5050)
+- **Station Adresse**: S-Bus Stationsadresse (0-253, Standard: 0)
+- **Scan Intervall**: Abfrageintervall in Sekunden (Standard: 30)
+
+#### Serial-S-Bus (RS-232/RS-485)
+- **Connection Type**: USB/Serial oder TCP-Seriell-Bridge
+- **Serial Port**: 
+  - USB/Serial: z.B. `/dev/ttyUSB0`, `/dev/ttyAMA0`
+  - TCP-Seriell-Bridge: z.B. `192.168.1.100:5050`
+- **Baud Rate**: 9600, 19200, 38400, 57600, 115200 (Standard: 9600)
+- **Station Adresse**: S-Bus Stationsadresse (0-253, Standard: 0)
+- **Scan Intervall**: Abfrageintervall in Sekunden (Standard: 30)
+
+#### Profi-S-Bus (Profibus Gateway)
+- **Gateway Host**: IP-Adresse des Profibus-Gateways
+- **Gateway Port**: TCP-Port des Gateways
+- **Station Adresse**: S-Bus Stationsadresse (0-253)
+- **Profibus Adresse**: Profibus-Knotennummer (0-126)
+- **Scan Intervall**: Abfrageintervall in Sekunden (Standard: 30)
 
 ### Auto-Discovery
 
-Die Integration unterstützt automatische Erkennung von PCD Steuerungen im Netzwerk. Wenn eine Steuerung gefunden wird, erscheint eine Benachrichtigung in Home Assistant.
+Die Integration unterstützt automatische Erkennung von PCD Steuerungen im Netzwerk:
+
+- **mDNS/Zeroconf**: Erkennung über `_http._tcp.local.` und `_sbus._tcp.local.`
+- **SSDP**: Erkennung von SAIA-Geräten mit Herstellerinformation
+
+Wenn eine Steuerung gefunden wird, erscheint eine Benachrichtigung in Home Assistant mit vorausgefüllten Verbindungsdaten.
 
 ## 📖 Verwendung
 
@@ -117,22 +146,47 @@ data:
 
 ## 🔧 Technische Details
 
-### S-Bus Protokoll
+### S-Bus Protokoll-Varianten
 
-Diese Integration implementiert das SAIA S-Bus Protokoll:
+Diese Integration implementiert alle drei SAIA S-Bus Protokoll-Varianten:
 
-- **Modus**: Data Mode (SM2) für Ether-S-Bus
-- **Port**: UDP 5050 (Standard)
-- **CRC**: CRC-16-CCITT mit 0x1021 Polynom
-- **Byte-Stuffing**: Automatische Behandlung von 0xB5/0xC5 Sequenzen
-- **Systemregister**: R600-R621 für Geräte-Identifikation
+#### Ether-S-Bus (UDP/TCP)
+- **Modus**: Ether-S-Bus über UDP Port 5050 (Standard) oder TCP
+- **Header**: 8-Byte Ether-S-Bus Header mit Sequenznummern
+- **CRC**: CRC-16-CCITT mit 0x0000 Initialwert (Polynom 0x1021)
+- **Retry**: 3 Versuche mit exponential backoff (0.5s, 1s, 2s)
+- **Discovery**: mDNS/Zeroconf und SSDP Support
+
+#### Serial-S-Bus (RS-232/RS-485)
+- **Modus**: Data Mode (SM2) mit 8N1 (8 Datenbits, No Parity, 1 Stopbit)
+- **Byte-Stuffing**: Automatische Behandlung von 0xB5/0xC5 Escape-Sequenzen
+- **CRC**: CRC-16-CCITT über entstuffte Daten
+- **Baudraten**: 1200-115200 Baud (Standard: 9600)
+- **Verbindungen**: Direkte USB/Serial oder TCP-Seriell-Bridge (ser2net)
+
+#### Profi-S-Bus (Profibus FDL)
+- **Transport**: Profibus FDL Layer 2
+- **Gateway**: Benötigt Profibus-zu-Ethernet Gateway
+- **Adressierung**: Separate Profibus- und S-Bus-Adressen
+
+### Systemregister
+
+Die Integration liest automatisch Geräte-Informationen aus den Systemregistern:
+
+- **R600-R604**: Seriennummer (ASCII)
+- **R605-R611**: Produkttyp (ASCII)
+- **R612**: Hardware-Version
+- **R614**: Firmware-Version (formatiert als Major.Minor.Patch)
+- **R621**: Protokoll-Version
 
 ### Architektur
 
-- **Config Flow**: UI-basierte Konfiguration
-- **DataUpdateCoordinator**: Zentrale Datenverwaltung
+- **Config Flow**: Multi-Step UI-basierte Konfiguration mit Protokollauswahl
+- **DataUpdateCoordinator**: Zentrale Datenverwaltung mit Connection Health Monitoring
+- **Auto-Reconnect**: Automatische Wiederverbindung bei bis zu 3 aufeinanderfolgenden Fehlern
 - **Async/Await**: Nicht-blockierende I/O-Operationen
 - **Type Hints**: Vollständige Type-Annotations für bessere Code-Qualität
+- **Factory Pattern**: Dynamische Instanziierung der korrekten Protokoll-Implementierung
 
 ## 🤝 Beiträge
 
