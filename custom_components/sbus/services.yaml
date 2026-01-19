@@ -1,0 +1,110 @@
+read_register:
+  name: Read Register
+  description: Read one or more registers from the S-Bus device
+  target:
+    device:
+      integration: sbus
+  fields:
+    start_address:
+      name: Start Address
+      description: The starting register address (0-9999)
+      required: true
+      example: 100
+      selector:
+        number:
+          min: 0
+          max: 9999
+          mode: box
+    count:
+      name: Count
+      description: Number of registers to read (1-32)
+      required: false
+      default: 1
+      example: 4
+      selector:
+        number:
+          min: 1
+          max: 32
+          mode: box
+
+write_register:
+  name: Write Register
+  description: Write a value to a register on the S-Bus device
+  target:
+    device:
+      integration: sbus
+  fields:
+    address:
+      name: Address
+      description: The register address (0-9999)
+      required: true
+      example: 100
+      selector:
+        number:
+          min: 0
+          max: 9999
+          mode: box
+    value:
+      name: Value
+      description: The value to write (32-bit integer)
+      required: true
+      example: 12345
+      selector:
+        number:
+          min: 0
+          max: 4294967295
+          mode: box
+
+read_flag:
+  name: Read Flag
+  description: Read flag (bit) values from the S-Bus device
+  target:
+    device:
+      integration: sbus
+  fields:
+    start_address:
+      name: Start Address
+      description: The starting flag address
+      required: true
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 65535
+          mode: box
+    count:
+      name: Count
+      description: Number of flags to read
+      required: false
+      default: 1
+      example: 8
+      selector:
+        number:
+          min: 1
+          max: 256
+          mode: box
+
+write_flag:
+  name: Write Flag
+  description: Write a flag (bit) value on the S-Bus device
+  target:
+    device:
+      integration: sbus
+  fields:
+    address:
+      name: Address
+      description: The flag address
+      required: true
+      example: 0
+      selector:
+        number:
+          min: 0
+          max: 65535
+          mode: box
+    value:
+      name: Value
+      description: The boolean value to write
+      required: true
+      example: true
+      selector:
+        boolean:

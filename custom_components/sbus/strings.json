@@ -1,0 +1,162 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SAIA S-Bus Setup",
+        "description": "Configure your SAIA PCD controller connection.",
+        "data": {
+          "host": "Host (IP Address or Hostname)",
+          "port": "Port",
+          "station": "Station Address (0-253)",
+          "scan_interval": "Scan Interval (seconds)"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the SAIA PCD controller",
+          "port": "UDP port for S-Bus communication (default: 5050)",
+          "station": "S-Bus station address of the target device",
+          "scan_interval": "How often to poll the device for updates"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure SAIA S-Bus",
+        "description": "Update the connection settings for your SAIA PCD controller.",
+        "data": {
+          "host": "Host (IP Address or Hostname)",
+          "port": "Port",
+          "station": "Station Address (0-253)",
+          "scan_interval": "Scan Interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the device. Please check the host and port.",
+      "invalid_auth": "Invalid station address or device not responding.",
+      "timeout": "Connection timeout. Please check your network connection.",
+      "crc_error": "CRC validation error. Data corruption detected.",
+      "unknown": "An unexpected error occurred. Please check the logs."
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "reconfigure_successful": "Configuration updated successfully."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure SAIA S-Bus Options",
+        "data": {
+          "scan_interval": "Scan Interval (seconds)"
+        },
+        "data_description": {
+          "scan_interval": "How often to poll the device for updates"
+        }
+      }
+    }
+  },
+  "services": {
+    "read_register": {
+      "name": "Read Register",
+      "description": "Read one or more registers from the S-Bus device.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The target S-Bus device."
+        },
+        "start_address": {
+          "name": "Start Address",
+          "description": "The starting register address (0-9999)."
+        },
+        "count": {
+          "name": "Count",
+          "description": "Number of registers to read (1-32)."
+        }
+      }
+    },
+    "write_register": {
+      "name": "Write Register",
+      "description": "Write a value to a register on the S-Bus device.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The target S-Bus device."
+        },
+        "address": {
+          "name": "Address",
+          "description": "The register address (0-9999)."
+        },
+        "value": {
+          "name": "Value",
+          "description": "The value to write (32-bit integer or float)."
+        }
+      }
+    },
+    "read_flag": {
+      "name": "Read Flag",
+      "description": "Read flag (bit) values from the S-Bus device.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The target S-Bus device."
+        },
+        "start_address": {
+          "name": "Start Address",
+          "description": "The starting flag address."
+        },
+        "count": {
+          "name": "Count",
+          "description": "Number of flags to read."
+        }
+      }
+    },
+    "write_flag": {
+      "name": "Write Flag",
+      "description": "Write a flag (bit) value on the S-Bus device.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The target S-Bus device."
+        },
+        "address": {
+          "name": "Address",
+          "description": "The flag address."
+        },
+        "value": {
+          "name": "Value",
+          "description": "The boolean value to write (true/false)."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "register": {
+        "name": "Register {address}"
+      },
+      "timer": {
+        "name": "Timer {address}"
+      },
+      "counter": {
+        "name": "Counter {address}"
+      }
+    },
+    "binary_sensor": {
+      "flag": {
+        "name": "Flag {address}"
+      },
+      "input": {
+        "name": "Input {address}"
+      },
+      "output": {
+        "name": "Output {address}"
+      }
+    },
+    "switch": {
+      "flag": {
+        "name": "Flag Switch {address}"
+      },
+      "output": {
+        "name": "Output Switch {address}"
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Check out code
+        uses: actions/checkout@v4
+
+      - name: 🏠 Validate with hassfest
+        uses: home-assistant/actions/hassfest@master
+
+      - name: 🚀 Create zip release
+        run: |
+          cd custom_components/sbus
+          zip -r ../../sbus.zip ./*
+
+      - name: 📤 Upload zip to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./sbus.zip
+          asset_name: sbus.zip
+          asset_content_type: application/zip

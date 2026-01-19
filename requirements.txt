@@ -1,0 +1,6 @@
+# Production dependencies
+homeassistant>=2024.1.0
+
+# Required for development
+aiohttp>=3.9.0
+pydantic>=2.0.0
