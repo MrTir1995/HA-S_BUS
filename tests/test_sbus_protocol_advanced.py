@@ -16,7 +16,9 @@ from custom_components.sbus.sbus_protocol import SBusTimeoutError
 
 # All tests in this file need socket access for protocol communication
 # Skip for now as they test private methods and require complex mocking
-pytestmark = pytest.mark.skip(reason="Advanced protocol tests require refactoring for proper mocking")
+pytestmark = pytest.mark.skip(
+    reason="Advanced protocol tests require refactoring for proper mocking"
+)
 
 
 @pytest.mark.enable_socket
