@@ -12,6 +12,12 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Unterstützung für Timer und Counter Entitäten
 - Diagnostics Support
 
+## [0.4.1] - 2026-11-04
+
+### Hinzugefügt
+- Icon und Logo von Saia Burgess Controls im Ordner `brand/`
+  (wird ab Home Assistant 2026.3 angezeigt).
+
 ## [0.4.0] - 2026-11-04
 
 ### Hinzugefügt
