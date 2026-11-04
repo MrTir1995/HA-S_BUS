@@ -98,14 +98,86 @@
   "options": {
     "step": {
       "init": {
-        "title": "Configure SAIA S-Bus Options",
+        "title": "SAIA S-Bus options",
+        "menu_options": {
+          "settings": "Scan interval",
+          "add_register": "Add register (sensor)",
+          "edit_register": "Edit register",
+          "remove_registers": "Remove registers",
+          "add_flag": "Add flag (binary sensor / switch)",
+          "remove_flags": "Remove flags"
+        }
+      },
+      "settings": {
+        "title": "Scan interval",
         "data": {
-          "scan_interval": "Scan Interval (seconds)"
+          "scan_interval": "Scan interval (seconds)"
         },
         "data_description": {
-          "scan_interval": "How often to poll the device for updates"
+          "scan_interval": "How often to poll the PCD"
+        }
+      },
+      "add_register": {
+        "title": "Add register",
+        "description": "Creates a sensor for a PCD register. Value = raw value × factor.",
+        "data": {
+          "address": "Register address",
+          "name": "Name",
+          "data_type": "Data type",
+          "factor": "Factor",
+          "unit": "Unit"
+        },
+        "data_description": {
+          "factor": "e.g. 0.1 if the PCD stores 32.5 °C as 325",
+          "unit": "Pick a unit or type your own; °C, kWh, W … set the matching sensor type"
+        }
+      },
+      "edit_register": {
+        "title": "Edit register",
+        "data": {
+          "register": "Register"
+        }
+      },
+      "edit_register_details": {
+        "title": "Edit register",
+        "description": "Value = raw value × factor.",
+        "data": {
+          "address": "Register address",
+          "name": "Name",
+          "data_type": "Data type",
+          "factor": "Factor",
+          "unit": "Unit"
+        },
+        "data_description": {
+          "factor": "e.g. 0.1 if the PCD stores 32.5 °C as 325"
+        }
+      },
+      "remove_registers": {
+        "title": "Remove registers",
+        "data": {
+          "registers": "Registers to remove"
+        }
+      },
+      "add_flag": {
+        "title": "Add flag",
+        "data": {
+          "address": "Flag address",
+          "name": "Name",
+          "writable": "Writable (switch)"
+        },
+        "data_description": {
+          "writable": "On: switch that can set/reset the flag. Off: read-only binary sensor"
+        }
+      },
+      "remove_flags": {
+        "title": "Remove flags",
+        "data": {
+          "flags": "Flags to remove"
         }
       }
+    },
+    "error": {
+      "address_exists": "This address is already configured."
     }
   },
   "services": {
@@ -211,6 +283,15 @@
       },
       "output": {
         "name": "Output Switch {address}"
+      }
+    }
+  },
+  "selector": {
+    "data_type": {
+      "options": {
+        "signed": "Integer (signed)",
+        "unsigned": "Integer (unsigned)",
+        "float": "Float (IEEE 754)"
       }
     }
   }

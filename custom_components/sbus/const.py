@@ -112,3 +112,26 @@ ATTR_START_ADDRESS: Final = "start_address"
 ATTR_DEVICE_TYPE: Final = "device_type"
 ATTR_FIRMWARE_VERSION: Final = "firmware_version"
 ATTR_SERIAL_NUMBER: Final = "serial_number"
+
+# Configurable data points (stored in the config entry options)
+CONF_REGISTERS: Final = "registers"
+CONF_FLAGS: Final = "flags"
+CONF_ADDRESS: Final = "address"
+CONF_NAME: Final = "name"
+CONF_DATA_TYPE: Final = "data_type"
+CONF_FACTOR: Final = "factor"
+CONF_UNIT: Final = "unit"
+CONF_WRITABLE: Final = "writable"
+
+DATA_TYPE_UNSIGNED: Final = "unsigned"
+DATA_TYPE_SIGNED: Final = "signed"
+DATA_TYPE_FLOAT: Final = "float"
+DATA_TYPES: Final = [DATA_TYPE_SIGNED, DATA_TYPE_UNSIGNED, DATA_TYPE_FLOAT]
+
+# Units offered in the options flow (any other unit can be typed in)
+UNITS: Final = ["°C", "%", "bar", "Pa", "kWh", "Wh", "kW", "W", "m³", "m³/h", "l/h", "V", "A", "h"]
+
+# Data points used when nothing has been configured yet (pre 0.4.0 behaviour)
+LEGACY_REGISTERS: Final = range(10)
+LEGACY_FLAGS: Final = range(32)
+LEGACY_SWITCHES: Final = range(8)

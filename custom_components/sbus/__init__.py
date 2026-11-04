@@ -13,6 +13,7 @@ from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
@@ -24,8 +25,10 @@ from .const import ATTR_ADDRESS
 from .const import ATTR_COUNT
 from .const import ATTR_START_ADDRESS
 from .const import ATTR_VALUE
+from .const import CONF_ADDRESS
 from .const import CONF_SCAN_INTERVAL
 from .const import CONF_STATION
+from .const import CONF_WRITABLE
 from .const import DEFAULT_SCAN_INTERVAL
 from .const import DEFAULT_STATION
 from .const import DOMAIN
@@ -34,6 +37,9 @@ from .const import SERVICE_READ_REGISTER
 from .const import SERVICE_WRITE_FLAG
 from .const import SERVICE_WRITE_REGISTER
 from .coordinator import SBusDataUpdateCoordinator
+from .datapoints import get_flags
+from .datapoints import get_registers
+from .entity import unique_id
 from .sbus_protocol import SBusProtocolError
 from .sbus_protocol import create_sbus_protocol
 
@@ -44,8 +50,11 @@ PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.S
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up SAIA S-Bus from a config entry."""
-    # Get scan interval from entry data
-    scan_interval = entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    scan_interval = entry.options.get(
+        CONF_SCAN_INTERVAL, entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    )
+    registers = get_registers(entry)
+    flags = get_flags(entry)
 
     # Create S-Bus protocol instance using factory
     protocol = create_sbus_protocol(entry.data)
@@ -75,7 +84,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = SBusDataUpdateCoordinator(
         hass,
         protocol,
-        scan_interval,
+        int(scan_interval),
+        register_addresses=[int(r[CONF_ADDRESS]) for r in registers],
+        flag_addresses=[int(f[CONF_ADDRESS]) for f in flags],
     )
 
     # Fetch initial data
@@ -101,8 +112,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         serial_number=device_info.get("serial_number"),
     )
 
+    _remove_stale_entities(hass, entry, device_info["serial_number"], registers, flags)
+
     # Set up platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
 
     # Register services
     def _get_protocols(call: ServiceCall) -> list:
@@ -218,6 +232,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     return True
+
+
+def _remove_stale_entities(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    serial: str,
+    registers: list[dict],
+    flags: list[dict],
+) -> None:
+    """Remove entities whose data point is no longer configured."""
+    expected = {unique_id(serial, "register", int(r[CONF_ADDRESS])) for r in registers}
+    expected |= {
+        unique_id(
+            serial,
+            "flag_switch" if f.get(CONF_WRITABLE) else "flag",
+            int(f[CONF_ADDRESS]),
+        )
+        for f in flags
+    }
+    registry = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if entity.unique_id not in expected:
+            registry.async_remove(entity.entity_id)
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload the entry when the options (data points) change."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

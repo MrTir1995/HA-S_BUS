@@ -26,6 +26,8 @@ async def test_coordinator_update_success(
         hass,
         mock_sbus_protocol,
         30,
+        register_addresses=[0, 1, 2],
+        flag_addresses=[0, 1, 2, 3],
     )
 
     mock_sbus_protocol.read_registers.return_value = [100, 200, 300]
@@ -51,6 +53,8 @@ async def test_coordinator_update_timeout(
         hass,
         mock_sbus_protocol,
         30,
+        register_addresses=[0, 1, 2],
+        flag_addresses=[0, 1, 2, 3],
     )
 
     mock_sbus_protocol.read_registers.side_effect = SBusTimeoutError("Timeout")
@@ -72,6 +76,8 @@ async def test_coordinator_update_protocol_error(
         hass,
         mock_sbus_protocol,
         30,
+        register_addresses=[0, 1, 2],
+        flag_addresses=[0, 1, 2, 3],
     )
 
     # Protocol error on registers, but flags succeed
@@ -97,6 +103,8 @@ async def test_coordinator_partial_data(
         hass,
         mock_sbus_protocol,
         30,
+        register_addresses=[0, 1, 2],
+        flag_addresses=[0, 1, 2, 3],
     )
 
     mock_sbus_protocol.read_registers.return_value = [100, 200, 300]

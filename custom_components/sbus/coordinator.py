@@ -15,15 +15,22 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
+from .const import MAX_REGISTER_COUNT
+from .datapoints import build_blocks
 from .sbus_protocol import SBusProtocolBase
 from .sbus_protocol import SBusProtocolError
 from .sbus_protocol import SBusTimeoutError
+from .sbus_protocol_base import MAX_FLAGS_PER_TELEGRAM
 
 _LOGGER = logging.getLogger(__name__)
 
 # Connection health monitoring
 MAX_CONSECUTIVE_ERRORS = 3
 RECONNECT_DELAY = 5  # seconds
+
+# Unused addresses that may be read along to save a telegram
+REGISTER_GAP = 4
+FLAG_GAP = 32
 
 
 class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -34,6 +41,8 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         hass: HomeAssistant,
         protocol: SBusProtocolBase,
         scan_interval: int,
+        register_addresses: list[int] | None = None,
+        flag_addresses: list[int] | None = None,
     ) -> None:
         """Initialize the coordinator.
 
@@ -41,6 +50,8 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass: Home Assistant instance
             protocol: S-Bus protocol handler (any protocol variant)
             scan_interval: Update interval in seconds
+            register_addresses: Registers to poll
+            flag_addresses: Flags to poll
 
         """
         super().__init__(
@@ -50,9 +61,16 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(seconds=scan_interval),
         )
         self.protocol = protocol
+        self._register_blocks = build_blocks(
+            register_addresses or [], MAX_REGISTER_COUNT, REGISTER_GAP
+        )
+        self._flag_blocks = build_blocks(
+            flag_addresses or [], MAX_FLAGS_PER_TELEGRAM, FLAG_GAP
+        )
         self._device_info: dict[str, Any] | None = None
         self._consecutive_errors = 0
-        self._is_connected = False
+        # The coordinator is created after the connection has been established
+        self._is_connected = True
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from S-Bus device.
@@ -77,29 +95,27 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "counters": {},
             }
 
-            # Example: Read first 10 registers
-            # In a real implementation, this should be configurable
-            # or dynamically determined based on configured entities
-            try:
-                registers = await self.protocol.read_registers(0, 10)
-                for i, value in enumerate(registers):
-                    data["registers"][i] = value
-            except SBusTimeoutError:
-                # Timeout is critical, re-raise
-                raise
-            except SBusProtocolError as err:
-                _LOGGER.debug("Could not read registers: %s", err)
+            for start, count in self._register_blocks:
+                try:
+                    values = await self.protocol.read_registers(start, count)
+                except SBusTimeoutError:
+                    raise
+                except SBusProtocolError as err:
+                    _LOGGER.debug("Could not read R%d+%d: %s", start, count, err)
+                    continue
+                for i, value in enumerate(values):
+                    data["registers"][start + i] = value
 
-            # Example: Read first 32 flags
-            try:
-                flags = await self.protocol.read_flags(0, 32)
+            for start, count in self._flag_blocks:
+                try:
+                    flags = await self.protocol.read_flags(start, count)
+                except SBusTimeoutError:
+                    raise
+                except SBusProtocolError as err:
+                    _LOGGER.debug("Could not read F%d+%d: %s", start, count, err)
+                    continue
                 for i, value in enumerate(flags):
-                    data["flags"][i] = value
-            except SBusTimeoutError:
-                # Timeout is critical, re-raise
-                raise
-            except SBusProtocolError as err:
-                _LOGGER.debug("Could not read flags: %s", err)
+                    data["flags"][start + i] = value
 
             # Reset error counter on success
             self._consecutive_errors = 0

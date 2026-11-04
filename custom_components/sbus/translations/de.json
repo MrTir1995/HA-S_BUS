@@ -1,0 +1,96 @@
+{
+  "options": {
+    "step": {
+      "init": {
+        "title": "SAIA S-Bus Optionen",
+        "menu_options": {
+          "settings": "Abfrageintervall",
+          "add_register": "Register hinzufügen (Sensor)",
+          "edit_register": "Register bearbeiten",
+          "remove_registers": "Register entfernen",
+          "add_flag": "Flag hinzufügen (Binärsensor / Schalter)",
+          "remove_flags": "Flags entfernen"
+        }
+      },
+      "settings": {
+        "title": "Abfrageintervall",
+        "data": {
+          "scan_interval": "Abfrageintervall (Sekunden)"
+        },
+        "data_description": {
+          "scan_interval": "Wie oft die PCD abgefragt wird"
+        }
+      },
+      "add_register": {
+        "title": "Register hinzufügen",
+        "description": "Legt einen Sensor für ein PCD-Register an. Wert = Rohwert × Faktor.",
+        "data": {
+          "address": "Registeradresse",
+          "name": "Name",
+          "data_type": "Datentyp",
+          "factor": "Faktor",
+          "unit": "Einheit"
+        },
+        "data_description": {
+          "factor": "z. B. 0,1, wenn die PCD 32,5 °C als 325 ablegt",
+          "unit": "Einheit wählen oder eigene eintippen; °C, kWh, W … setzen den passenden Sensortyp"
+        }
+      },
+      "edit_register": {
+        "title": "Register bearbeiten",
+        "data": {
+          "register": "Register"
+        }
+      },
+      "edit_register_details": {
+        "title": "Register bearbeiten",
+        "description": "Wert = Rohwert × Faktor.",
+        "data": {
+          "address": "Registeradresse",
+          "name": "Name",
+          "data_type": "Datentyp",
+          "factor": "Faktor",
+          "unit": "Einheit"
+        },
+        "data_description": {
+          "factor": "z. B. 0,1, wenn die PCD 32,5 °C als 325 ablegt"
+        }
+      },
+      "remove_registers": {
+        "title": "Register entfernen",
+        "data": {
+          "registers": "Zu entfernende Register"
+        }
+      },
+      "add_flag": {
+        "title": "Flag hinzufügen",
+        "data": {
+          "address": "Flag-Adresse",
+          "name": "Name",
+          "writable": "Beschreibbar (Schalter)"
+        },
+        "data_description": {
+          "writable": "An: Schalter, der das Flag setzen/rücksetzen kann. Aus: nur lesender Binärsensor"
+        }
+      },
+      "remove_flags": {
+        "title": "Flags entfernen",
+        "data": {
+          "flags": "Zu entfernende Flags"
+        }
+      }
+    },
+    "error": {
+      "address_exists": "Diese Adresse ist bereits konfiguriert."
+    }
+  },
+  "selector": {
+    "data_type": {
+      "options": {
+        "signed": "Ganzzahl (mit Vorzeichen)",
+        "unsigned": "Ganzzahl (ohne Vorzeichen)",
+        "float": "Gleitkomma (IEEE 754)"
+      }
+    }
+  }
+}

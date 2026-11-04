@@ -13,12 +13,26 @@ from homeassistant.const import CONF_HOST
 from homeassistant.const import CONF_PORT
 from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import selector
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from homeassistant.data_entry_flow import FlowResult
 
 from .const import BAUDRATES
+from .const import CONF_ADDRESS
+from .const import CONF_DATA_TYPE
+from .const import CONF_FACTOR
+from .const import CONF_FLAGS
+from .const import CONF_NAME
+from .const import CONF_REGISTERS
+from .const import CONF_UNIT
+from .const import CONF_WRITABLE
+from .const import DATA_TYPE_SIGNED
+from .const import DATA_TYPES
+from .const import MAX_REGISTER_ADDRESS
+from .const import UNITS
+from .datapoints import is_configured
 from .const import CONF_BAUDRATE
 from .const import CONF_CONNECTION_TYPE
 from .const import CONF_PROTOCOL_TYPE
@@ -497,32 +511,323 @@ class SBusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class SBusOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for SAIA S-Bus."""
+    """Options: scan interval and the registers/flags to create entities for."""
 
-    async def async_step_init(
+    def __init__(self) -> None:
+        """Initialize the options flow."""
+        self._edit_index: int | None = None
+
+    # -- helpers -------------------------------------------------------
+
+    @property
+    def _registers(self) -> list[dict[str, Any]]:
+        if not is_configured(self.config_entry):
+            return []
+        return list(self.config_entry.options.get(CONF_REGISTERS, []))
+
+    @property
+    def _flags(self) -> list[dict[str, Any]]:
+        if not is_configured(self.config_entry):
+            return []
+        return list(self.config_entry.options.get(CONF_FLAGS, []))
+
+    def _save(
         self,
-        user_input: dict[str, Any] | None = None,
+        registers: list[dict[str, Any]] | None = None,
+        flags: list[dict[str, Any]] | None = None,
+        **extra: Any,
     ) -> FlowResult:
-        """Manage the options."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+        options = dict(self.config_entry.options)
+        options[CONF_REGISTERS] = sorted(
+            self._registers if registers is None else registers,
+            key=lambda r: r[CONF_ADDRESS],
+        )
+        options[CONF_FLAGS] = sorted(
+            self._flags if flags is None else flags, key=lambda f: f[CONF_ADDRESS]
+        )
+        options.update(extra)
+        return self.async_create_entry(title="", data=options)
 
-        data_schema = vol.Schema(
+    @staticmethod
+    def _register_label(reg: dict[str, Any]) -> str:
+        unit = f" [{reg[CONF_UNIT]}]" if reg.get(CONF_UNIT) else ""
+        return f"R {reg[CONF_ADDRESS]} – {reg[CONF_NAME]}{unit}"
+
+    @staticmethod
+    def _flag_label(flag: dict[str, Any]) -> str:
+        kind = "switch" if flag.get(CONF_WRITABLE) else "binary_sensor"
+        return f"F {flag[CONF_ADDRESS]} – {flag[CONF_NAME]} ({kind})"
+
+    @staticmethod
+    def _register_schema(defaults: dict[str, Any]) -> vol.Schema:
+        return vol.Schema(
             {
+                vol.Required(
+                    CONF_ADDRESS, default=defaults.get(CONF_ADDRESS, vol.UNDEFINED)
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        max=MAX_REGISTER_ADDRESS,
+                        step=1,
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                vol.Required(
+                    CONF_NAME, default=defaults.get(CONF_NAME, vol.UNDEFINED)
+                ): selector.TextSelector(),
+                vol.Required(
+                    CONF_DATA_TYPE, default=defaults.get(CONF_DATA_TYPE, DATA_TYPE_SIGNED)
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=DATA_TYPES,
+                        translation_key=CONF_DATA_TYPE,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Required(
+                    CONF_FACTOR, default=defaults.get(CONF_FACTOR, 1.0)
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        step="any", mode=selector.NumberSelectorMode.BOX
+                    )
+                ),
                 vol.Optional(
-                    CONF_SCAN_INTERVAL,
-                    default=self.config_entry.data.get(
-                        CONF_SCAN_INTERVAL,
-                        DEFAULT_SCAN_INTERVAL,
-                    ),
-                ): vol.All(
-                    vol.Coerce(int),
-                    vol.Range(min=5, max=3600),
+                    CONF_UNIT,
+                    description={"suggested_value": defaults.get(CONF_UNIT)},
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=UNITS,
+                        custom_value=True,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
                 ),
             }
         )
 
+    @staticmethod
+    def _clean_register(user_input: dict[str, Any]) -> dict[str, Any]:
+        return {
+            CONF_ADDRESS: int(user_input[CONF_ADDRESS]),
+            CONF_NAME: str(user_input[CONF_NAME]).strip(),
+            CONF_DATA_TYPE: user_input[CONF_DATA_TYPE],
+            CONF_FACTOR: float(user_input[CONF_FACTOR]) or 1.0,
+            CONF_UNIT: (user_input.get(CONF_UNIT) or "").strip() or None,
+        }
+
+    # -- steps ---------------------------------------------------------
+
+    async def async_step_init(
+        self,
+        user_input: dict[str, Any] | None = None,  # noqa: ARG002
+    ) -> FlowResult:
+        """Show the options menu."""
+        menu = ["settings", "add_register"]
+        if self._registers:
+            menu += ["edit_register", "remove_registers"]
+        menu.append("add_flag")
+        if self._flags:
+            menu.append("remove_flags")
+        return self.async_show_menu(step_id="init", menu_options=menu)
+
+    async def async_step_settings(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Edit the scan interval."""
+        if user_input is not None:
+            options = dict(self.config_entry.options)
+            options[CONF_SCAN_INTERVAL] = int(user_input[CONF_SCAN_INTERVAL])
+            return self.async_create_entry(title="", data=options)
+
+        current = self.config_entry.options.get(
+            CONF_SCAN_INTERVAL,
+            self.config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+        )
         return self.async_show_form(
-            step_id="init",
-            data_schema=data_schema,
+            step_id="settings",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_SCAN_INTERVAL, default=current): vol.All(
+                        vol.Coerce(int), vol.Range(min=5, max=3600)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_add_register(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Add a register as sensor."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            register = self._clean_register(user_input)
+            registers = self._registers
+            if any(r[CONF_ADDRESS] == register[CONF_ADDRESS] for r in registers):
+                errors[CONF_ADDRESS] = "address_exists"
+            else:
+                return self._save(registers=[*registers, register])
+
+        return self.async_show_form(
+            step_id="add_register",
+            data_schema=self._register_schema(user_input or {}),
+            errors=errors,
+        )
+
+    async def async_step_edit_register(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Choose the register to edit."""
+        registers = self._registers
+        if user_input is not None:
+            self._edit_index = int(user_input["register"])
+            return await self.async_step_edit_register_details()
+
+        return self.async_show_form(
+            step_id="edit_register",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("register"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=str(i), label=self._register_label(r)
+                                )
+                                for i, r in enumerate(registers)
+                            ],
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_edit_register_details(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Edit one register."""
+        registers = self._registers
+        assert self._edit_index is not None
+        current = registers[self._edit_index]
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            register = self._clean_register(user_input)
+            others = [r for i, r in enumerate(registers) if i != self._edit_index]
+            if any(r[CONF_ADDRESS] == register[CONF_ADDRESS] for r in others):
+                errors[CONF_ADDRESS] = "address_exists"
+            else:
+                return self._save(registers=[*others, register])
+
+        return self.async_show_form(
+            step_id="edit_register_details",
+            data_schema=self._register_schema(user_input or current),
+            errors=errors,
+        )
+
+    async def async_step_remove_registers(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Remove registers."""
+        registers = self._registers
+        if user_input is not None:
+            remove = {int(i) for i in user_input.get("registers", [])}
+            return self._save(
+                registers=[r for i, r in enumerate(registers) if i not in remove]
+            )
+
+        return self.async_show_form(
+            step_id="remove_registers",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional("registers", default=[]): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=str(i), label=self._register_label(r)
+                                )
+                                for i, r in enumerate(registers)
+                            ],
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_add_flag(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Add a flag as binary sensor or switch."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            flag = {
+                CONF_ADDRESS: int(user_input[CONF_ADDRESS]),
+                CONF_NAME: str(user_input[CONF_NAME]).strip(),
+                CONF_WRITABLE: bool(user_input.get(CONF_WRITABLE, False)),
+            }
+            flags = self._flags
+            if any(f[CONF_ADDRESS] == flag[CONF_ADDRESS] for f in flags):
+                errors[CONF_ADDRESS] = "address_exists"
+            else:
+                return self._save(flags=[*flags, flag])
+
+        defaults = user_input or {}
+        return self.async_show_form(
+            step_id="add_flag",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_ADDRESS, default=defaults.get(CONF_ADDRESS, vol.UNDEFINED)
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0,
+                            max=65535,
+                            step=1,
+                            mode=selector.NumberSelectorMode.BOX,
+                        )
+                    ),
+                    vol.Required(
+                        CONF_NAME, default=defaults.get(CONF_NAME, vol.UNDEFINED)
+                    ): selector.TextSelector(),
+                    vol.Required(
+                        CONF_WRITABLE, default=defaults.get(CONF_WRITABLE, False)
+                    ): selector.BooleanSelector(),
+                }
+            ),
+            errors=errors,
+        )
+
+    async def async_step_remove_flags(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Remove flags."""
+        flags = self._flags
+        if user_input is not None:
+            remove = {int(i) for i in user_input.get("flags", [])}
+            return self._save(flags=[f for i, f in enumerate(flags) if i not in remove])
+
+        return self.async_show_form(
+            step_id="remove_flags",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional("flags", default=[]): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=str(i), label=self._flag_label(f)
+                                )
+                                for i, f in enumerate(flags)
+                            ],
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.LIST,
+                        )
+                    )
+                }
+            ),
         )
