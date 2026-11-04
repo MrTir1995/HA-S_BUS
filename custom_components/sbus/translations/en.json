@@ -1,0 +1,298 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SAIA S-Bus Setup",
+        "description": "Select the S-Bus protocol variant for your SAIA PCD controller.",
+        "data": {
+          "protocol_type": "Protocol Type"
+        },
+        "data_description": {
+          "protocol_type": "Choose the S-Bus protocol variant based on your connection type"
+        }
+      },
+      "ether_sbus": {
+        "title": "Ether-S-Bus Configuration",
+        "description": "Configure connection via Ether-S-Bus (UDP/TCP over Ethernet).",
+        "data": {
+          "connection_type": "Connection Type",
+          "host": "Host (IP Address or Hostname)",
+          "port": "Port",
+          "station": "Station Address (0-253)",
+          "scan_interval": "Scan Interval (seconds)"
+        },
+        "data_description": {
+          "connection_type": "UDP (standard) or TCP connection",
+          "host": "IP address or hostname of the SAIA PCD controller",
+          "port": "UDP/TCP port for S-Bus communication (default: 5050)",
+          "station": "S-Bus station address of the target device",
+          "scan_interval": "How often to poll the device for updates"
+        }
+      },
+      "serial_sbus": {
+        "title": "Serial-S-Bus Configuration",
+        "description": "Configure connection via Serial-S-Bus (RS-232/RS-485 or TCP serial bridge). For serial port: e.g., /dev/ttyUSB0. For TCP serial bridge: e.g., 192.168.1.100:5050",
+        "data": {
+          "connection_type": "Connection Type",
+          "serial_port": "Serial Port or TCP Address",
+          "baudrate": "Baud Rate",
+          "station": "Station Address (0-253)",
+          "scan_interval": "Scan Interval (seconds)"
+        },
+        "data_description": {
+          "connection_type": "USB/Serial or TCP serial bridge",
+          "serial_port": "Serial port path (e.g., /dev/ttyUSB0) or TCP address (host:port)",
+          "baudrate": "Serial communication baud rate",
+          "station": "S-Bus station address of the target device",
+          "scan_interval": "How often to poll the device for updates"
+        }
+      },
+      "profi_sbus": {
+        "title": "Profi-S-Bus Configuration",
+        "description": "Configure connection via Profi-S-Bus (Profibus gateway).",
+        "data": {
+          "host": "Gateway Host (IP Address or Hostname)",
+          "port": "Gateway Port",
+          "station": "Station Address (0-253)",
+          "profibus_address": "Profibus Address (0-126)",
+          "scan_interval": "Scan Interval (seconds)"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the Profibus gateway",
+          "port": "TCP port of the Profibus gateway",
+          "station": "S-Bus station address of the target device",
+          "profibus_address": "Profibus node address",
+          "scan_interval": "How often to poll the device for updates"
+        }
+      },
+      "discovery_confirm": {
+        "title": "Discovered SAIA PCD Device",
+        "description": "A SAIA PCD device was discovered on your network:\n\nDevice: {name}\nHost: {host}\n\nDo you want to configure this device?"
+      },
+      "reconfigure": {
+        "title": "Reconfigure SAIA S-Bus",
+        "description": "Update the connection settings for your SAIA PCD controller.",
+        "data": {
+          "host": "Host (IP Address or Hostname)",
+          "port": "Port",
+          "station": "Station Address (0-253)",
+          "scan_interval": "Scan Interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the device. Please check the connection settings.",
+      "invalid_auth": "Invalid station address or device not responding.",
+      "timeout": "Connection timeout. Please check your network connection and device availability.",
+      "crc_error": "CRC validation error. Data corruption detected.",
+      "serial_port_not_found": "Serial port not found. Please check the port path and permissions.",
+      "invalid_protocol": "Invalid protocol type selected.",
+      "unknown": "An unexpected error occurred. Please check the logs."
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "reconfigure_successful": "Configuration updated successfully.",
+      "reconfigure_failed": "Reconfiguration failed. Please try again."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SAIA S-Bus options",
+        "menu_options": {
+          "settings": "Scan interval",
+          "add_register": "Add register (sensor)",
+          "edit_register": "Edit register",
+          "remove_registers": "Remove registers",
+          "add_flag": "Add flag (binary sensor / switch)",
+          "remove_flags": "Remove flags"
+        }
+      },
+      "settings": {
+        "title": "Scan interval",
+        "data": {
+          "scan_interval": "Scan interval (seconds)"
+        },
+        "data_description": {
+          "scan_interval": "How often to poll the PCD"
+        }
+      },
+      "add_register": {
+        "title": "Add register",
+        "description": "Creates a sensor for a PCD register. Value = raw value × factor.",
+        "data": {
+          "address": "Register address",
+          "name": "Name",
+          "data_type": "Data type",
+          "factor": "Factor",
+          "unit": "Unit"
+        },
+        "data_description": {
+          "factor": "e.g. 0.1 if the PCD stores 32.5 °C as 325",
+          "unit": "Pick a unit or type your own; °C, kWh, W … set the matching sensor type"
+        }
+      },
+      "edit_register": {
+        "title": "Edit register",
+        "data": {
+          "register": "Register"
+        }
+      },
+      "edit_register_details": {
+        "title": "Edit register",
+        "description": "Value = raw value × factor.",
+        "data": {
+          "address": "Register address",
+          "name": "Name",
+          "data_type": "Data type",
+          "factor": "Factor",
+          "unit": "Unit"
+        },
+        "data_description": {
+          "factor": "e.g. 0.1 if the PCD stores 32.5 °C as 325"
+        }
+      },
+      "remove_registers": {
+        "title": "Remove registers",
+        "data": {
+          "registers": "Registers to remove"
+        }
+      },
+      "add_flag": {
+        "title": "Add flag",
+        "data": {
+          "address": "Flag address",
+          "name": "Name",
+          "writable": "Writable (switch)"
+        },
+        "data_description": {
+          "writable": "On: switch that can set/reset the flag. Off: read-only binary sensor"
+        }
+      },
+      "remove_flags": {
+        "title": "Remove flags",
+        "data": {
+          "flags": "Flags to remove"
+        }
+      }
+    },
+    "error": {
+      "address_exists": "This address is already configured."
+    }
+  },
+  "services": {
+    "read_register": {
+      "name": "Read Register",
+      "description": "Read one or more registers from the S-Bus device.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The target S-Bus device."
+        },
+        "start_address": {
+          "name": "Start Address",
+          "description": "The starting register address (0-9999)."
+        },
+        "count": {
+          "name": "Count",
+          "description": "Number of registers to read (1-32)."
+        }
+      }
+    },
+    "write_register": {
+      "name": "Write Register",
+      "description": "Write a value to a register on the S-Bus device.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The target S-Bus device."
+        },
+        "address": {
+          "name": "Address",
+          "description": "The register address (0-9999)."
+        },
+        "value": {
+          "name": "Value",
+          "description": "The value to write (32-bit integer or float)."
+        }
+      }
+    },
+    "read_flag": {
+      "name": "Read Flag",
+      "description": "Read flag (bit) values from the S-Bus device.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The target S-Bus device."
+        },
+        "start_address": {
+          "name": "Start Address",
+          "description": "The starting flag address."
+        },
+        "count": {
+          "name": "Count",
+          "description": "Number of flags to read."
+        }
+      }
+    },
+    "write_flag": {
+      "name": "Write Flag",
+      "description": "Write a flag (bit) value on the S-Bus device.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The target S-Bus device."
+        },
+        "address": {
+          "name": "Address",
+          "description": "The flag address."
+        },
+        "value": {
+          "name": "Value",
+          "description": "The boolean value to write (true/false)."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "register": {
+        "name": "Register {address}"
+      },
+      "timer": {
+        "name": "Timer {address}"
+      },
+      "counter": {
+        "name": "Counter {address}"
+      }
+    },
+    "binary_sensor": {
+      "flag": {
+        "name": "Flag {address}"
+      },
+      "input": {
+        "name": "Input {address}"
+      },
+      "output": {
+        "name": "Output {address}"
+      }
+    },
+    "switch": {
+      "flag": {
+        "name": "Flag Switch {address}"
+      },
+      "output": {
+        "name": "Output Switch {address}"
+      }
+    }
+  },
+  "selector": {
+    "data_type": {
+      "options": {
+        "signed": "Integer (signed)",
+        "unsigned": "Integer (unsigned)",
+        "float": "Float (IEEE 754)"
+      }
+    }
+  }
+}

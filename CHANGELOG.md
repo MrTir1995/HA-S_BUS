@@ -8,10 +8,27 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 ## [Unreleased]
 
 ### Geplant
-- YAML-Konfiguration für Entitäten
 - Automatische Erkennung aller verfügbaren Datenpunkte
 - Unterstützung für Timer und Counter Entitäten
 - Diagnostics Support
+
+## [0.4.0] - 2026-11-04
+
+### Hinzugefügt
+- Register und Flags sind in den Optionen der Integration konfigurierbar
+  (hinzufügen, bearbeiten, entfernen). Register werden zu Sensoren mit Name,
+  Datentyp (Ganzzahl mit/ohne Vorzeichen, Gleitkomma), Faktor und Einheit;
+  die Einheit setzt automatisch den Sensortyp (z. B. °C → Temperatur).
+  Flags werden zu Binärsensoren oder, wenn beschreibbar, zu Schaltern.
+- Deutsche und englische Übersetzungen der Oberfläche.
+
+### Geändert
+- Nur noch konfigurierte Adressen werden abgefragt; benachbarte Adressen
+  werden in einem Telegramm gelesen.
+- Ohne Konfiguration bleiben die bisherigen Entitäten (R 0–9, F 0–31,
+  Schalter F 0–7) erhalten. Sobald Datenpunkte konfiguriert sind, werden
+  nicht mehr benötigte Entitäten automatisch entfernt.
+- Kein unnötiger Reconnect (mit 5 s Wartezeit) mehr beim Start.
 
 ## [0.3.2] - 2026-11-04
 

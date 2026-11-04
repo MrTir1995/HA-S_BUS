@@ -97,11 +97,25 @@ Wenn eine Steuerung gefunden wird, erscheint eine Benachrichtigung in Home Assis
 
 ### Entitäten
 
-Nach der Konfiguration werden automatisch Entitäten für die erkannten Datenpunkte erstellt:
+Welche Register und Flags als Entitäten angelegt werden, legst du unter
+**Einstellungen → Geräte & Dienste → SAIA S-Bus → Konfigurieren** fest:
 
-- **Sensor**: Register-Werte (R0-R9999), Timer, Counter
-- **Binary Sensor**: Flags, Inputs, Outputs (Bit-Werte)
-- **Switch**: Outputs, Flags (schreibbar)
+- **Register hinzufügen** → Sensor. Wert = Rohwert × Faktor.
+  - *Datentyp*: Ganzzahl mit/ohne Vorzeichen oder Gleitkomma (IEEE 754)
+  - *Faktor*: z. B. `0.1`, wenn die PCD 32,5 °C als `325` ablegt
+  - *Einheit*: °C, kWh, W, bar … setzen automatisch den passenden Sensortyp
+    (Temperatur, Energie, Leistung, Druck …)
+- **Flag hinzufügen** → Binärsensor (nur lesen) oder Schalter (beschreibbar)
+- Register bearbeiten, Register/Flags entfernen, Abfrageintervall ändern
+
+Nah beieinander liegende Adressen werden mit einem Telegramm gelesen.
+Solange nichts konfiguriert ist, werden wie bisher R 0–9, F 0–31 und Schalter
+für F 0–7 angelegt; diese verschwinden, sobald der erste Datenpunkt
+konfiguriert wird.
+
+Den richtigen Datentyp und Faktor findest du am schnellsten mit der Aktion
+`sbus.read_register` (siehe unten): Sie zeigt jeden Wert roh, mit Vorzeichen,
+hexadezimal und als Gleitkommazahl.
 
 ### Beispiel-Automation
 
@@ -110,7 +124,7 @@ automation:
   - alias: "Temperatur überwachen"
     trigger:
       - platform: numeric_state
-        entity_id: sensor.sbus_register_100
+        entity_id: sensor.pcd3_m5540_vorlauf
         above: 25
     action:
       - service: notify.notify
@@ -123,7 +137,8 @@ automation:
 Die Integration bietet Custom Services für direkten Zugriff:
 
 #### `sbus.read_register`
-Liest ein oder mehrere Register aus.
+Liest ein oder mehrere Register aus und gibt die Werte als Antwort zurück
+(in den Entwicklerwerkzeugen unter **Aktionen** sichtbar).
 
 ```yaml
 service: sbus.read_register
