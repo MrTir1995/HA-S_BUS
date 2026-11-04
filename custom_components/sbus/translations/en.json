@@ -81,13 +81,14 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to the device. Please check the connection settings.",
+      "cannot_connect": "Failed to connect to the device. Please check host, port and connection settings.",
       "invalid_auth": "Invalid station address or device not responding.",
       "timeout": "Connection timeout. Please check your network connection and device availability.",
       "crc_error": "CRC validation error. Data corruption detected.",
       "serial_port_not_found": "Serial port not found. Please check the port path and permissions.",
       "invalid_protocol": "Invalid protocol type selected.",
-      "unknown": "An unexpected error occurred. Please check the logs."
+      "unknown": "An unexpected error occurred. Please check the logs.",
+      "cannot_connect_tcp": "The device refused the TCP connection or did not respond. Ether-S-Bus normally runs over UDP – please choose UDP as connection type."
     },
     "abort": {
       "already_configured": "This device is already configured.",

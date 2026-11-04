@@ -10,6 +10,7 @@ import logging
 
 from .const import DEFAULT_TIMEOUT
 from .sbus_protocol_base import SBusProtocolBase
+from .sbus_protocol_base import SBusConnectionError
 from .sbus_protocol_base import SBusProtocolError
 from .sbus_protocol_base import SBusTimeoutError
 
@@ -55,6 +56,11 @@ class EtherSBusProtocol(SBusProtocolBase):
         self._sequence_number: int = 0
         self._max_retries: int = 3
 
+    @property
+    def endpoint_id(self) -> str:
+        """Identity of the configured endpoint (host, port, station)."""
+        return f"{self.host}:{self.port}:{self.station}"
+
     async def connect(self) -> None:
         """Establish connection to the S-Bus device via Ether-S-Bus."""
         if self.use_tcp:
@@ -71,10 +77,14 @@ class EtherSBusProtocol(SBusProtocolBase):
             self._protocol = _EtherSBusDatagramProtocol()
             return self._protocol
 
-        transport, _ = await loop.create_datagram_endpoint(
-            protocol_factory,
-            remote_addr=(self.host, self.port),
-        )
+        try:
+            transport, _ = await loop.create_datagram_endpoint(
+                protocol_factory,
+                remote_addr=(self.host, self.port),
+            )
+        except OSError as err:
+            msg = f"Could not open UDP socket to {self.host}:{self.port}: {err}"
+            raise SBusConnectionError(msg) from err
         self._transport = transport  # type: ignore[assignment]
 
         _LOGGER.debug(
@@ -86,10 +96,18 @@ class EtherSBusProtocol(SBusProtocolBase):
 
     async def _connect_tcp(self) -> None:
         """Establish TCP connection."""
-        self._reader, self._writer = await asyncio.open_connection(
-            self.host,
-            self.port,
-        )
+        try:
+            self._reader, self._writer = await asyncio.wait_for(
+                asyncio.open_connection(self.host, self.port),
+                timeout=self.timeout,
+            )
+        except (OSError, TimeoutError) as err:
+            reason = "timed out" if isinstance(err, TimeoutError) else str(err)
+            msg = (
+                f"Could not connect via TCP to {self.host}:{self.port} ({reason}). "
+                "Ether-S-Bus normally uses UDP"
+            )
+            raise SBusConnectionError(msg) from err
 
         _LOGGER.debug(
             "Connected to %s:%d via TCP (station %d)",
@@ -232,11 +250,19 @@ class EtherSBusProtocol(SBusProtocolBase):
                     length_bytes = await self._reader.readexactly(4)
                     length = int.from_bytes(length_bytes, "big")
                     if not 4 < length <= MAX_FRAME_SIZE:
+                        # The rest of the stream can't be framed any more:
+                        # drop the connection so the next request starts clean.
+                        await self.disconnect()
                         msg = f"Invalid Ether-S-Bus frame length {length}"
                         raise SBusProtocolError(msg)
                     data = length_bytes + await self._reader.readexactly(length - 4)
                     _LOGGER.debug("Received TCP frame: %s", data.hex())
-                    reply_seq, attribute, payload = self.parse_ether_frame(data)
+                    try:
+                        reply_seq, attribute, payload = self.parse_ether_frame(data)
+                    except SBusProtocolError as err:
+                        # Length-delimited, so the stream is still in sync
+                        _LOGGER.debug("Ignoring invalid Ether-S-Bus frame: %s", err)
+                        continue
                     if reply_seq == sequence:
                         return attribute, payload
                     _LOGGER.debug(

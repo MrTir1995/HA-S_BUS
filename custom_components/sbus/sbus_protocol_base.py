@@ -76,6 +76,10 @@ class SBusNakError(SBusProtocolError):
     """The PCD rejected the request (NAK)."""
 
 
+class SBusConnectionError(SBusProtocolError):
+    """The transport connection could not be established."""
+
+
 def _build_crc_table() -> list[int]:
     """Build the CRC-16-CCITT (polynomial 0x1021) lookup table."""
     table = []
@@ -108,6 +112,15 @@ class SBusProtocolBase(ABC):
         self.station = station
         self.timeout = timeout
         self._lock = asyncio.Lock()
+
+    @property
+    def endpoint_id(self) -> str:
+        """Stable identity of the configured endpoint.
+
+        Used as device identity when the PCD does not provide a readable
+        serial number. Transports override this with address and station.
+        """
+        return f"station-{self.station}"
 
     @abstractmethod
     async def connect(self) -> None:
@@ -200,9 +213,15 @@ class SBusProtocolBase(ABC):
             msg = f"Ether-S-Bus frame too short: {len(frame)} bytes"
             raise SBusProtocolError(msg)
 
-        length, _version, _ptype, sequence, attribute = struct.unpack(
+        length, version, ptype, sequence, attribute = struct.unpack(
             "!IBBHB", frame[: ETHER_SBUS_HEADER_SIZE + 1]
         )
+        if version != ETHER_SBUS_VERSION or ptype != ETHER_SBUS_PROTOCOL_TYPE:
+            msg = (
+                f"Unsupported Ether-S-Bus frame (version {version:02X}, "
+                f"type {ptype:02X})"
+            )
+            raise SBusProtocolError(msg)
         if length != len(frame):
             msg = (
                 f"Ether-S-Bus length mismatch: header says {length}, "
@@ -226,11 +245,20 @@ class SBusProtocolBase(ABC):
         """Build a request PDU: ``station, command, payload``."""
         return bytes([self.station & 0xFF, cmd & 0xFF]) + payload
 
-    async def _request_data(self, cmd: int, payload: bytes, data_size: int) -> bytes:
-        """Send a read request and return the reply data."""
+    async def _request_data(
+        self, cmd: int, payload: bytes, data_size: int, *, locked: bool = False
+    ) -> bytes:
+        """Send a read request and return the reply data.
+
+        ``locked=True`` means the caller already holds ``self._lock`` (used
+        to keep multi-telegram reads atomic).
+        """
         pdu = self._build_pdu(cmd, payload)
-        async with self._lock:
+        if locked:
             attribute, data = await self._send_and_receive(pdu, data_size)
+        else:
+            async with self._lock:
+                attribute, data = await self._send_and_receive(pdu, data_size)
 
         if attribute == ATTR_ACK:
             self._raise_for_ack(data)
@@ -321,12 +349,17 @@ class SBusProtocolBase(ABC):
 
         flags: list[bool] = []
         offset = 0
-        while offset < count:
-            chunk = min(MAX_FLAGS_PER_TELEGRAM, count - offset)
-            payload = struct.pack("!BH", chunk - 1, address + offset)
-            data = await self._request_data(CMD_READ_FLAG, payload, (chunk + 7) // 8)
-            flags.extend(bool(data[i // 8] & (1 << (i % 8))) for i in range(chunk))
-            offset += chunk
+        # Hold the lock across all telegrams so no write can slip in between
+        # and the result is one consistent snapshot.
+        async with self._lock:
+            while offset < count:
+                chunk = min(MAX_FLAGS_PER_TELEGRAM, count - offset)
+                payload = struct.pack("!BH", chunk - 1, address + offset)
+                data = await self._request_data(
+                    CMD_READ_FLAG, payload, (chunk + 7) // 8, locked=True
+                )
+                flags.extend(bool(data[i // 8] & (1 << (i % 8))) for i in range(chunk))
+                offset += chunk
         return flags
 
     async def write_flag(self, address: int, value: bool) -> None:
@@ -345,17 +378,17 @@ class SBusProtocolBase(ABC):
     async def get_device_info(self) -> dict[str, Any]:
         """Get device information from the PCD system registers.
 
-        The first read is not wrapped: if the PCD does not answer at all,
-        the error propagates so the caller (config flow, setup) can report
-        that the device is unreachable instead of silently creating a
-        "SAIA PCD (Unknown)" device. Later reads are optional because not
-        every PCD/firmware provides all of these system registers.
+        Timeouts always propagate, so an unresponsive PCD is never set up.
+        The product type, hardware version and serial number registers are
+        optional: if the PCD rejects them, defaults are used and the
+        configured endpoint (address and station) serves as identity, so
+        several such PCDs do not collide.
         """
         firmware_version = (await self.read_registers(SYSREG_FIRMWARE, 1))[0]
 
         product_type = ""
         hw_version = 0
-        serial_number = "UNKNOWN"
+        serial_number = self.endpoint_id
         try:
             product_type_raw = await self.read_registers(
                 SYSREG_PRODUCT_TYPE_START,
@@ -372,8 +405,14 @@ class SBusProtocolBase(ABC):
                 SYSREG_SERIAL_END - SYSREG_SERIAL_START + 1,
             )
             serial_number = f"{serial_raw[0]:08X}{serial_raw[1]:08X}"
+        except SBusTimeoutError:
+            raise
         except SBusProtocolError as err:
-            _LOGGER.warning("Could not read all device information: %s", err)
+            _LOGGER.warning(
+                "Could not read all device information, using %s as identity: %s",
+                serial_number,
+                err,
+            )
 
         return {
             "firmware_version": firmware_version,

@@ -12,6 +12,26 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Unterstützung für Timer und Counter Entitäten
 - Diagnostics Support
 
+## [0.4.2] - 2026-11-04
+
+### Behoben
+- Ether-S-Bus-Frames mit falscher Version oder falschem Protokolltyp werden
+  verworfen.
+- TCP: Beschädigte Frames werden übersprungen statt die Anfrage abzubrechen;
+  bei ungültiger Längenangabe wird die Verbindung neu aufgebaut.
+- Profi-S-Bus: Gateway-Antworten werden vollständig gelesen, und Antworten
+  mit fremder Sequenznummer werden verworfen.
+- Ein Timeout beim Lesen der Geräteinformationen bricht die Einrichtung ab,
+  statt die PCD mit unvollständigen Daten anzulegen.
+- Liefert die PCD keine Seriennummer, wird der Endpunkt (Adresse, Port,
+  Station) als Kennung verwendet, damit mehrere solcher PCDs angelegt werden
+  können.
+- Flags, die über mehrere Telegramme gelesen werden, bilden einen
+  konsistenten Zustand (kein Schreibbefehl dazwischen).
+- Eine abgelehnte oder nicht erreichbare Verbindung meldet „Verbindung
+  fehlgeschlagen“ statt „Unerwarteter Fehler“, bei TCP mit Hinweis auf UDP.
+  Der Verbindungsaufbau hat ein Zeitlimit.
+
 ## [0.4.1] - 2026-11-04
 
 ### Hinzugefügt

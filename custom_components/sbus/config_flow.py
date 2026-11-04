@@ -50,12 +50,14 @@ from .const import DEFAULT_SCAN_INTERVAL
 from .const import DEFAULT_STATION
 from .const import DOMAIN
 from .const import ERROR_CANNOT_CONNECT
+from .const import ERROR_CANNOT_CONNECT_TCP
 from .const import ERROR_SERIAL_PORT_NOT_FOUND
 from .const import ERROR_TIMEOUT
 from .const import ERROR_UNKNOWN
 from .const import PROTOCOL_ETHER_SBUS
 from .const import PROTOCOL_PROFI_SBUS
 from .const import PROTOCOL_SERIAL_SBUS
+from .sbus_protocol import SBusConnectionError
 from .sbus_protocol import SBusProtocolError
 from .sbus_protocol import SBusTimeoutError
 from .sbus_protocol import create_sbus_protocol
@@ -164,6 +166,13 @@ class SBusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             except data_entry_flow.AbortFlow:
                 raise
+            except SBusConnectionError:
+                _LOGGER.warning("Could not connect to S-Bus device", exc_info=True)
+                errors["base"] = (
+                    ERROR_CANNOT_CONNECT_TCP
+                    if user_input.get(CONF_CONNECTION_TYPE) == CONNECTION_TYPE_TCP
+                    else ERROR_CANNOT_CONNECT
+                )
             except SBusTimeoutError:
                 _LOGGER.exception("Timeout connecting to S-Bus device")
                 errors["base"] = ERROR_TIMEOUT
@@ -236,6 +245,9 @@ class SBusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             except data_entry_flow.AbortFlow:
                 raise
+            except SBusConnectionError:
+                _LOGGER.warning("Could not connect to S-Bus device", exc_info=True)
+                errors["base"] = ERROR_CANNOT_CONNECT
             except SBusTimeoutError:
                 _LOGGER.exception("Timeout connecting to S-Bus device")
                 errors["base"] = ERROR_TIMEOUT
@@ -316,6 +328,9 @@ class SBusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             except data_entry_flow.AbortFlow:
                 raise
+            except SBusConnectionError:
+                _LOGGER.warning("Could not connect to S-Bus device", exc_info=True)
+                errors["base"] = ERROR_CANNOT_CONNECT
             except SBusTimeoutError:
                 _LOGGER.exception("Timeout connecting to S-Bus device")
                 errors["base"] = ERROR_TIMEOUT
