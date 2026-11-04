@@ -13,6 +13,21 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Unterstützung für Timer und Counter Entitäten
 - Diagnostics Support
 
+## [0.3.2] - 2026-11-04
+
+### Geändert
+- Die Aktionen `sbus.read_register` und `sbus.read_flag` geben die gelesenen
+  Werte jetzt als Antwort zurück (in den Entwicklerwerkzeugen unter
+  „Aktionen“ sichtbar). Register werden als Rohwert, vorzeichenbehaftet,
+  hexadezimal und als IEEE-Float ausgegeben.
+- Fehler beim Lesen oder Schreiben werden als Fehlermeldung angezeigt statt
+  nur ins Log geschrieben.
+
+### Behoben
+- Adressen und Anzahl aus der Oberfläche (Fließkommazahlen) führten zu einem
+  Fehler beim Erstellen des Telegramms.
+- Aktionen berücksichtigen jetzt das ausgewählte Gerät.
+
 ## [0.3.1] - 2026-11-04
 
 ### Behoben

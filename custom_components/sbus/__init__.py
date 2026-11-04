@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import logging
+import struct
 from typing import TYPE_CHECKING
 
 from homeassistant.const import CONF_HOST
 from homeassistant.const import CONF_PORT
 from homeassistant.const import Platform
+from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 
 if TYPE_CHECKING:
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.core import HomeAssistant
     from homeassistant.core import ServiceCall
+    from homeassistant.core import ServiceResponse
 
 from .const import ATTR_ADDRESS
 from .const import ATTR_COUNT
@@ -101,92 +105,86 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Register services
-    async def handle_read_register(call: ServiceCall) -> None:
-        """Handle read_register service call."""
-        call.data["device_id"]
-        start_address = call.data[ATTR_START_ADDRESS]
-        count = call.data.get(ATTR_COUNT, 1)
+    def _get_protocols(call: ServiceCall) -> list:
+        """Return the protocol instances targeted by a service call."""
+        device_ids = call.data.get("device_id") or []
+        if isinstance(device_ids, str):
+            device_ids = [device_ids]
+        registry = dr.async_get(hass)
+        entry_ids = {
+            entry_id
+            for device_id in device_ids
+            if (device := registry.async_get(device_id))
+            for entry_id in device.config_entries
+        }
+        protocols = [
+            data["protocol"]
+            for entry_id, data in hass.data[DOMAIN].items()
+            if isinstance(data, dict)
+            and "protocol" in data
+            and (not entry_ids or entry_id in entry_ids)
+        ]
+        if not protocols:
+            msg = "No S-Bus device found for this action"
+            raise HomeAssistantError(msg)
+        return protocols
 
-        # Find the protocol for this device
-        for entry_data in hass.data[DOMAIN].values():
-            if isinstance(entry_data, dict):
-                protocol_instance = entry_data.get("protocol")
-                if protocol_instance:
-                    try:
-                        values = await protocol_instance.read_registers(
-                            start_address,
-                            count,
-                        )
-                        _LOGGER.info(
-                            "Read registers R%d-%d: %s",
-                            start_address,
-                            start_address + count - 1,
-                            values,
-                        )
-                    except SBusProtocolError:
-                        _LOGGER.exception("Failed to read registers")
-                    break
+    async def handle_read_register(call: ServiceCall) -> ServiceResponse:
+        """Handle read_register service call."""
+        start_address = int(call.data[ATTR_START_ADDRESS])
+        count = int(call.data.get(ATTR_COUNT, 1))
+        protocol_instance = _get_protocols(call)[0]
+        try:
+            values = await protocol_instance.read_registers(start_address, count)
+        except SBusProtocolError as err:
+            msg = f"Failed to read registers R{start_address}: {err}"
+            raise HomeAssistantError(msg) from err
+        _LOGGER.debug("Read registers R%d+%d: %s", start_address, count, values)
+        return {
+            "registers": {
+                f"R{start_address + i}": {
+                    "value": value,
+                    "signed": value - 0x100000000 if value & 0x80000000 else value,
+                    "hex": f"0x{value:08X}",
+                    "float_ieee": round(struct.unpack("!f", struct.pack("!I", value))[0], 6),
+                }
+                for i, value in enumerate(values)
+            }
+        }
 
     async def handle_write_register(call: ServiceCall) -> None:
         """Handle write_register service call."""
-        call.data["device_id"]
-        address = call.data[ATTR_ADDRESS]
-        value = call.data[ATTR_VALUE]
+        address = int(call.data[ATTR_ADDRESS])
+        value = int(call.data[ATTR_VALUE])
+        try:
+            for protocol_instance in _get_protocols(call):
+                await protocol_instance.write_register(address, value)
+        except SBusProtocolError as err:
+            msg = f"Failed to write register R{address}: {err}"
+            raise HomeAssistantError(msg) from err
 
-        # Find the protocol for this device
-        for entry_data in hass.data[DOMAIN].values():
-            if isinstance(entry_data, dict):
-                protocol_instance = entry_data.get("protocol")
-                if protocol_instance:
-                    try:
-                        await protocol_instance.write_register(address, value)
-                        _LOGGER.info("Wrote register R%d = %d", address, value)
-                    except SBusProtocolError:
-                        _LOGGER.exception("Failed to write register")
-                    break
-
-    async def handle_read_flag(call: ServiceCall) -> None:
+    async def handle_read_flag(call: ServiceCall) -> ServiceResponse:
         """Handle read_flag service call."""
-        call.data["device_id"]
-        start_address = call.data[ATTR_START_ADDRESS]
-        count = call.data.get(ATTR_COUNT, 1)
-
-        # Find the protocol for this device
-        for entry_data in hass.data[DOMAIN].values():
-            if isinstance(entry_data, dict):
-                protocol_instance = entry_data.get("protocol")
-                if protocol_instance:
-                    try:
-                        values = await protocol_instance.read_flags(
-                            start_address, count
-                        )
-                        _LOGGER.info(
-                            "Read flags F%d-%d: %s",
-                            start_address,
-                            start_address + count - 1,
-                            values,
-                        )
-                    except SBusProtocolError:
-                        _LOGGER.exception("Failed to read flags")
-                    break
+        start_address = int(call.data[ATTR_START_ADDRESS])
+        count = int(call.data.get(ATTR_COUNT, 1))
+        protocol_instance = _get_protocols(call)[0]
+        try:
+            values = await protocol_instance.read_flags(start_address, count)
+        except SBusProtocolError as err:
+            msg = f"Failed to read flags F{start_address}: {err}"
+            raise HomeAssistantError(msg) from err
+        return {"flags": {f"F{start_address + i}": v for i, v in enumerate(values)}}
 
     async def handle_write_flag(call: ServiceCall) -> None:
         """Handle write_flag service call."""
-        call.data["device_id"]
-        address = call.data[ATTR_ADDRESS]
-        value = call.data[ATTR_VALUE]
-
-        # Find the protocol for this device
-        for entry_data in hass.data[DOMAIN].values():
-            if isinstance(entry_data, dict):
-                protocol_instance = entry_data.get("protocol")
-                if protocol_instance:
-                    try:
-                        await protocol_instance.write_flag(address, value)
-                        _LOGGER.info("Wrote flag F%d = %s", address, value)
-                    except SBusProtocolError:
-                        _LOGGER.exception("Failed to write flag")
-                    break
+        address = int(call.data[ATTR_ADDRESS])
+        value = bool(call.data[ATTR_VALUE])
+        try:
+            for protocol_instance in _get_protocols(call):
+                await protocol_instance.write_flag(address, value)
+        except SBusProtocolError as err:
+            msg = f"Failed to write flag F{address}: {err}"
+            raise HomeAssistantError(msg) from err
 
     # Register services only once
     if not hass.services.has_service(DOMAIN, SERVICE_READ_REGISTER):
@@ -194,6 +192,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             DOMAIN,
             SERVICE_READ_REGISTER,
             handle_read_register,
+            supports_response=SupportsResponse.OPTIONAL,
         )
 
     if not hass.services.has_service(DOMAIN, SERVICE_WRITE_REGISTER):
@@ -208,6 +207,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             DOMAIN,
             SERVICE_READ_FLAG,
             handle_read_flag,
+            supports_response=SupportsResponse.OPTIONAL,
         )
 
     if not hass.services.has_service(DOMAIN, SERVICE_WRITE_FLAG):
