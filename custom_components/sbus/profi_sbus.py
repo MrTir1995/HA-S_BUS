@@ -7,14 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
 
 from .const import DEFAULT_TIMEOUT
 from .sbus_protocol_base import SBusProtocolBase
 from .sbus_protocol_base import SBusTimeoutError
-
-if TYPE_CHECKING:
-    pass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,6 +46,7 @@ class ProfiSBusProtocol(SBusProtocolBase):
         self.profibus_address = profibus_address
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
+        self._sequence_number = 0
 
     async def connect(self) -> None:
         """Establish connection to the S-Bus device via Profi-S-Bus.
@@ -85,14 +82,10 @@ class ProfiSBusProtocol(SBusProtocolBase):
             self.station,
         )
 
-    async def _send_and_receive(self, telegram: bytes) -> bytes:
-        """Send telegram and receive response via Profi-S-Bus.
+    async def _send_and_receive(self, pdu: bytes, data_size: int) -> tuple[int, bytes]:
+        """Send a PDU via the Profibus gateway and receive the reply.
 
-        Args:
-            telegram: The telegram to send
-
-        Returns:
-            The response telegram
+        Profi-S-Bus uses the same frame layout as Ether-S-Bus.
 
         Raises:
             SBusTimeoutError: If communication times out
@@ -102,32 +95,26 @@ class ProfiSBusProtocol(SBusProtocolBase):
             msg = "Not connected to device"
             raise SBusTimeoutError(msg)
 
+        self._sequence_number = (self._sequence_number + 1) % 65536
+        telegram = self.build_ether_frame(self._sequence_number, pdu)
         _LOGGER.debug("Sending Profibus telegram: %s", telegram.hex())
 
-        # Wrap telegram with Profibus gateway protocol
-        # This is a simplified example - actual implementation depends on gateway
-        wrapped_telegram = self._wrap_profibus(telegram)
-
-        # Send telegram
-        self._writer.write(wrapped_telegram)
+        self._writer.write(self._wrap_profibus(telegram))
         await self._writer.drain()
 
-        # Wait for response with timeout
         try:
             response_wrapped = await asyncio.wait_for(
                 self._reader.read(1024),
                 timeout=self.timeout,
             )
-
-            # Unwrap Profibus protocol
-            response = self._unwrap_profibus(response_wrapped)
-
-            _LOGGER.debug("Received Profibus response: %s", response.hex())
-            return response
-
         except TimeoutError as err:
             msg = f"Timeout waiting for response from {self.host}:{self.port}"
             raise SBusTimeoutError(msg) from err
+
+        response = self._unwrap_profibus(response_wrapped)
+        _LOGGER.debug("Received Profibus response: %s", response.hex())
+        _sequence, attribute, data = self.parse_ether_frame(response)
+        return attribute, data
 
     def _wrap_profibus(self, telegram: bytes) -> bytes:
         """Wrap S-Bus telegram with Profibus gateway protocol.

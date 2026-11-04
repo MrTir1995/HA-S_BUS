@@ -42,6 +42,11 @@ SBUS_FRAME_START: Final = 0xB5
 SBUS_ESCAPE_CHAR: Final = 0xC5
 SBUS_BROADCAST_ADDR: Final = 255
 
+# Ether-S-Bus header
+ETHER_SBUS_HEADER_SIZE: Final = 8  # length(4) version(1) type(1) sequence(2)
+ETHER_SBUS_VERSION: Final = 0x01
+ETHER_SBUS_PROTOCOL_TYPE: Final = 0x00
+
 # Attribute bytes
 ATTR_REQUEST: Final = 0x00
 ATTR_RESPONSE: Final = 0x01
@@ -84,7 +89,6 @@ SERVICE_READ_FLAG: Final = "read_flag"
 SERVICE_WRITE_FLAG: Final = "write_flag"
 
 # Protocol limits and validation
-MIN_TELEGRAM_SIZE: Final = 12
 MAX_REGISTER_ADDRESS: Final = 9999
 MAX_REGISTER_COUNT: Final = 32
 MAX_REGISTER_VALUE: Final = 0xFFFFFFFF
