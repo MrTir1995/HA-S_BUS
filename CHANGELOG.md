@@ -7,6 +7,20 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [Unreleased]
 
+### Behoben
+- Ether-S-Bus: Telegramme enthalten jetzt den vorgeschriebenen 8-Byte-Header
+  (Länge, Version, Typ, Sequenznummer), und die CRC wird über den gesamten Frame
+  berechnet. Bisher hat die PCD jede Anfrage verworfen, was sich als
+  "Timeout communicating with S-Bus device" gezeigt hat.
+- Korrekter PDU-Aufbau für Register- und Flag-Befehle (`Anzahl-1` als 1 Byte
+  vor der Adresse, Byte-Zähler bei Schreibbefehlen).
+- Antworten werden am richtigen Offset ausgewertet; Schreibbefehle prüfen ACK/NAK.
+- UDP-Antworten werden über die Sequenznummer zugeordnet; veraltete oder
+  beschädigte Antworten werden verworfen.
+- Serial-S-Bus nutzt Data-Mode-Framing (0xB5, Byte-Stuffing, 8N1).
+- Setup und Config-Flow schlagen fehl, wenn die PCD nicht antwortet, statt ein
+  Gerät "SAIA PCD (Unknown)" anzulegen.
+
 ### Geplant
 - YAML-Konfiguration für Entitäten
 - Automatische Erkennung aller verfügbaren Datenpunkte

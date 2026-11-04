@@ -7,14 +7,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
 
 from .const import DEFAULT_TIMEOUT
 from .sbus_protocol_base import SBusProtocolBase
+from .sbus_protocol_base import SBusProtocolError
 from .sbus_protocol_base import SBusTimeoutError
 
-if TYPE_CHECKING:
-    pass
+# Upper bound for a sane Ether-S-Bus frame (largest S-Bus reply is well below)
+MAX_FRAME_SIZE = 1024
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -49,9 +49,7 @@ class EtherSBusProtocol(SBusProtocolBase):
         self.port = port
         self.use_tcp = use_tcp
         self._transport: asyncio.DatagramTransport | asyncio.Transport | None = None
-        self._protocol: _EtherSBusDatagramProtocol | _EtherSBusStreamProtocol | None = (
-            None
-        )
+        self._protocol: _EtherSBusDatagramProtocol | None = None
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._sequence_number: int = 0
@@ -66,7 +64,7 @@ class EtherSBusProtocol(SBusProtocolBase):
 
     async def _connect_udp(self) -> None:
         """Establish UDP connection."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def protocol_factory() -> _EtherSBusDatagramProtocol:
             """Create protocol instance."""
@@ -103,10 +101,14 @@ class EtherSBusProtocol(SBusProtocolBase):
     async def disconnect(self) -> None:
         """Close connection to the S-Bus device."""
         if self.use_tcp and self._writer:
-            self._writer.close()
-            await self._writer.wait_closed()
+            writer = self._writer
             self._writer = None
             self._reader = None
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except OSError:
+                pass
         elif self._transport:
             self._transport.close()
             self._transport = None
@@ -119,32 +121,29 @@ class EtherSBusProtocol(SBusProtocolBase):
             self.station,
         )
 
-    async def _send_and_receive(self, telegram: bytes) -> bytes:
-        """Send telegram and receive response via Ether-S-Bus with retry logic.
+    async def _send_and_receive(self, pdu: bytes, data_size: int) -> tuple[int, bytes]:
+        """Send a PDU wrapped in an Ether-S-Bus frame and return the reply.
 
-        Implements automatic retry on timeout with exponential backoff.
-        Manages sequence numbers to ensure response matches request.
-
-        Args:
-            telegram: The telegram to send
-
-        Returns:
-            The response telegram
+        Retries on timeout with exponential backoff. Every attempt uses a
+        new sequence number; only a reply carrying the sequence number of
+        the current request is accepted, so late answers to an earlier
+        attempt are discarded.
 
         Raises:
             SBusTimeoutError: If communication times out after all retries
 
         """
-        last_error = None
+        last_error: SBusTimeoutError | None = None
         for attempt in range(self._max_retries):
+            sequence = self._get_next_sequence()
+            frame = self.build_ether_frame(sequence, pdu)
             try:
                 if self.use_tcp:
-                    return await self._send_and_receive_tcp(telegram)
-                return await self._send_and_receive_udp(telegram)
+                    return await self._send_and_receive_tcp(frame, sequence)
+                return await self._send_and_receive_udp(frame, sequence)
             except SBusTimeoutError as err:
                 last_error = err
                 if attempt < self._max_retries - 1:
-                    # Exponential backoff: 0.5s, 1s, 2s
                     wait_time = 0.5 * (2**attempt)
                     _LOGGER.debug(
                         "Retry %d/%d after timeout, waiting %.1fs",
@@ -153,83 +152,101 @@ class EtherSBusProtocol(SBusProtocolBase):
                         wait_time,
                     )
                     await asyncio.sleep(wait_time)
-                else:
-                    _LOGGER.error(
-                        "All %d retry attempts failed for %s:%d",
-                        self._max_retries,
-                        self.host,
-                        self.port,
-                    )
-        # If we get here, all retries failed
+
+        _LOGGER.error(
+            "No answer from %s:%d (station %d) after %d attempts. Check IP, "
+            "port, S-Bus station number and that Ether-S-Bus is enabled on the PCD",
+            self.host,
+            self.port,
+            self.station,
+            self._max_retries,
+        )
         if last_error:
             raise last_error
         msg = f"Communication failed after {self._max_retries} attempts"
         raise SBusTimeoutError(msg)
 
     def _get_next_sequence(self) -> int:
-        """Get next sequence number for Ether-S-Bus packets.
-
-        Returns:
-            Next sequence number (0-65535, wraps around)
-
-        """
+        """Get next sequence number for Ether-S-Bus packets (0-65535, wraps)."""
         self._sequence_number = (self._sequence_number + 1) % 65536
         return self._sequence_number
 
-    async def _send_and_receive_udp(self, telegram: bytes) -> bytes:
+    async def _send_and_receive_udp(
+        self, frame: bytes, sequence: int
+    ) -> tuple[int, bytes]:
         """Send and receive via UDP."""
         if not self._transport or not self._protocol:
-            msg = "Not connected to device"
-            raise SBusTimeoutError(msg)
+            await self._connect_udp()
+        assert self._transport is not None
+        assert isinstance(self._protocol, _EtherSBusDatagramProtocol)
 
-        _LOGGER.debug("Sending UDP telegram: %s", telegram.hex())
-
-        # Clear any pending responses
         self._protocol.clear_response()
+        _LOGGER.debug("Sending UDP frame: %s", frame.hex())
+        self._transport.sendto(frame)  # type: ignore[union-attr]
 
-        # Send telegram (type ignore for DatagramTransport)
-        if isinstance(self._transport, asyncio.DatagramTransport):
-            self._transport.sendto(telegram)  # type: ignore[attr-defined]
-        else:
-            msg = "Transport is not a DatagramTransport"
-            raise SBusTimeoutError(msg)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.timeout
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                msg = f"Timeout waiting for response from {self.host}:{self.port}"
+                raise SBusTimeoutError(msg)
+            try:
+                data = await asyncio.wait_for(
+                    self._protocol.get_response(), timeout=remaining
+                )
+            except TimeoutError as err:
+                msg = f"Timeout waiting for response from {self.host}:{self.port}"
+                raise SBusTimeoutError(msg) from err
 
-        # Wait for response with timeout
-        try:
-            response = await asyncio.wait_for(
-                self._protocol.get_response(),
-                timeout=self.timeout,
-            )
-            _LOGGER.debug("Received UDP response: %s", response.hex())
-            return response
+            _LOGGER.debug("Received UDP frame: %s", data.hex())
+            try:
+                reply_seq, attribute, payload = self.parse_ether_frame(data)
+            except SBusProtocolError as err:
+                _LOGGER.debug("Ignoring invalid Ether-S-Bus frame: %s", err)
+                continue
+            if reply_seq != sequence:
+                _LOGGER.debug(
+                    "Ignoring reply with sequence %d (expected %d)",
+                    reply_seq,
+                    sequence,
+                )
+                continue
+            return attribute, payload
 
-        except TimeoutError as err:
-            msg = f"Timeout waiting for response from {self.host}:{self.port}"
-            raise SBusTimeoutError(msg) from err
-
-    async def _send_and_receive_tcp(self, telegram: bytes) -> bytes:
+    async def _send_and_receive_tcp(
+        self, frame: bytes, sequence: int
+    ) -> tuple[int, bytes]:
         """Send and receive via TCP."""
         if not self._reader or not self._writer:
-            msg = "Not connected to device"
-            raise SBusTimeoutError(msg)
+            await self._connect_tcp()
+        assert self._reader is not None
+        assert self._writer is not None
 
-        _LOGGER.debug("Sending TCP telegram: %s", telegram.hex())
-
-        # Send telegram
-        self._writer.write(telegram)
-        await self._writer.drain()
-
-        # Wait for response with timeout
+        _LOGGER.debug("Sending TCP frame: %s", frame.hex())
         try:
-            # Read at least minimum telegram size
-            response = await asyncio.wait_for(
-                self._reader.read(1024),
-                timeout=self.timeout,
-            )
-            _LOGGER.debug("Received TCP response: %s", response.hex())
-            return response
-
-        except TimeoutError as err:
+            self._writer.write(frame)
+            await self._writer.drain()
+            async with asyncio.timeout(self.timeout):
+                while True:
+                    length_bytes = await self._reader.readexactly(4)
+                    length = int.from_bytes(length_bytes, "big")
+                    if not 4 < length <= MAX_FRAME_SIZE:
+                        msg = f"Invalid Ether-S-Bus frame length {length}"
+                        raise SBusProtocolError(msg)
+                    data = length_bytes + await self._reader.readexactly(length - 4)
+                    _LOGGER.debug("Received TCP frame: %s", data.hex())
+                    reply_seq, attribute, payload = self.parse_ether_frame(data)
+                    if reply_seq == sequence:
+                        return attribute, payload
+                    _LOGGER.debug(
+                        "Ignoring reply with sequence %d (expected %d)",
+                        reply_seq,
+                        sequence,
+                    )
+        except (TimeoutError, OSError, asyncio.IncompleteReadError) as err:
+            # The stream may be out of sync now, start over with a fresh connection
+            await self.disconnect()
             msg = f"Timeout waiting for response from {self.host}:{self.port}"
             raise SBusTimeoutError(msg) from err
 
@@ -254,40 +271,6 @@ class _EtherSBusDatagramProtocol(asyncio.DatagramProtocol):
     def error_received(self, exc: Exception) -> None:
         """Called when an error is received."""
         _LOGGER.error("Datagram error received: %s", exc)
-
-    async def get_response(self) -> bytes:
-        """Wait for and return the next response."""
-        return await self._response_queue.get()
-
-    def clear_response(self) -> None:
-        """Clear any pending responses in the queue."""
-        while not self._response_queue.empty():
-            try:
-                self._response_queue.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-
-
-class _EtherSBusStreamProtocol(asyncio.Protocol):
-    """Internal protocol handler for TCP communication."""
-
-    def __init__(self) -> None:
-        """Initialize the protocol handler."""
-        self._response_queue: asyncio.Queue[bytes] = asyncio.Queue()
-        self._transport: asyncio.Transport | None = None
-
-    def connection_made(self, transport: asyncio.BaseTransport) -> None:
-        """Called when connection is established."""
-        self._transport = transport  # type: ignore[assignment]
-
-    def data_received(self, data: bytes) -> None:
-        """Called when data is received."""
-        _LOGGER.debug("Received data: %s", data.hex())
-        self._response_queue.put_nowait(data)
-
-    def error_received(self, exc: Exception) -> None:
-        """Called when an error is received."""
-        _LOGGER.error("Stream error received: %s", exc)
 
     async def get_response(self) -> bytes:
         """Wait for and return the next response."""

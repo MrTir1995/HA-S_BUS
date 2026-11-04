@@ -7,15 +7,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+import struct
 
+from .const import ATTR_ACK
+from .const import ATTR_REQUEST
 from .const import DEFAULT_BAUDRATE
 from .const import DEFAULT_TIMEOUT
+from .const import SBUS_ESCAPE_CHAR
+from .const import SBUS_FRAME_START
+from .sbus_protocol_base import ACK_DATA_SIZE
+from .sbus_protocol_base import SBusCRCError
 from .sbus_protocol_base import SBusProtocolBase
+from .sbus_protocol_base import SBusProtocolError
 from .sbus_protocol_base import SBusTimeoutError
-
-if TYPE_CHECKING:
-    pass
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -72,7 +76,7 @@ class SerialSBusProtocol(SBusProtocolBase):
             url=self.port,
             baudrate=self.baudrate,
             bytesize=8,
-            parity="E",  # Even parity
+            parity="N",  # Data mode (SM2) uses 8N1, parity is only used in parity mode
             stopbits=1,
             timeout=self.timeout,
         )
@@ -119,48 +123,91 @@ class SerialSBusProtocol(SBusProtocolBase):
             self.station,
         )
 
-    async def _send_and_receive(self, telegram: bytes) -> bytes:
-        """Send telegram and receive response via Serial-S-Bus.
+    @classmethod
+    def build_serial_frame(cls, pdu: bytes, attribute: int = ATTR_REQUEST) -> bytes:
+        """Wrap a PDU into a Serial-S-Bus data mode (SM2) frame.
 
-        Args:
-            telegram: The telegram to send
+        Frame layout: ``FS(0xB5) attribute PDU crc(2)``. The CRC covers the
+        unstuffed frame starting with FS; everything after FS is byte
+        stuffed (0xB5 -> 0xC5 0x00, 0xC5 -> 0xC5 0x01).
+        """
+        body = bytes([attribute]) + pdu
+        crc = cls.calculate_crc(bytes([SBUS_FRAME_START]) + body)
+        body += struct.pack("!H", crc)
+        stuffed = bytearray([SBUS_FRAME_START])
+        for byte in body:
+            if byte == SBUS_FRAME_START:
+                stuffed += bytes([SBUS_ESCAPE_CHAR, 0x00])
+            elif byte == SBUS_ESCAPE_CHAR:
+                stuffed += bytes([SBUS_ESCAPE_CHAR, 0x01])
+            else:
+                stuffed.append(byte)
+        return bytes(stuffed)
 
-        Returns:
-            The response telegram
+    async def _read_unstuffed_byte(self) -> int:
+        """Read one byte from the stream and resolve byte stuffing."""
+        assert self._reader is not None
+        byte = (await self._reader.readexactly(1))[0]
+        if byte == SBUS_FRAME_START:
+            msg = "Unexpected frame start inside telegram"
+            raise SBusProtocolError(msg)
+        if byte != SBUS_ESCAPE_CHAR:
+            return byte
+        escaped = (await self._reader.readexactly(1))[0]
+        if escaped == 0x00:
+            return SBUS_FRAME_START
+        if escaped == 0x01:
+            return SBUS_ESCAPE_CHAR
+        msg = f"Invalid escape sequence C5 {escaped:02X}"
+        raise SBusProtocolError(msg)
+
+    async def _read_frame(self, data_size: int) -> tuple[int, bytes]:
+        """Read and validate one data mode reply frame."""
+        assert self._reader is not None
+        # Skip everything up to the frame start
+        while (await self._reader.readexactly(1))[0] != SBUS_FRAME_START:
+            pass
+        attribute = await self._read_unstuffed_byte()
+        size = ACK_DATA_SIZE if attribute == ATTR_ACK else data_size
+        body = bytearray([attribute])
+        for _ in range(size + 2):
+            body.append(await self._read_unstuffed_byte())
+
+        received_crc = struct.unpack("!H", body[-2:])[0]
+        calculated_crc = self.calculate_crc(bytes([SBUS_FRAME_START]) + body[:-2])
+        if received_crc != calculated_crc:
+            msg = f"CRC mismatch: expected {calculated_crc:04X}, got {received_crc:04X}"
+            raise SBusCRCError(msg)
+        return attribute, bytes(body[1:-2])
+
+    async def _send_and_receive(self, pdu: bytes, data_size: int) -> tuple[int, bytes]:
+        """Send a PDU as Serial-S-Bus data mode frame and receive the reply.
 
         Raises:
             SBusTimeoutError: If communication times out
 
         """
         if not self._reader or not self._writer:
-            msg = "Not connected to device"
-            raise SBusTimeoutError(msg)
+            await self.connect()
+        assert self._reader is not None
+        assert self._writer is not None
 
-        _LOGGER.debug("Sending serial telegram: %s", telegram.hex())
+        frame = self.build_serial_frame(pdu)
+        _LOGGER.debug("Sending serial frame: %s", frame.hex())
 
-        # Clear input buffer if possible
-        try:
-            if hasattr(self._reader, "_buffer") and hasattr(
-                self._reader._buffer, "clear"  # type: ignore[attr-defined] # noqa: SLF001
-            ):
-                self._reader._buffer.clear()  # type: ignore[attr-defined] # noqa: SLF001
-        except Exception:
-            pass  # Ignore if buffer clearing fails
+        # Drop stale bytes from an earlier, timed out request
+        buffer = getattr(self._reader, "_buffer", None)
+        if isinstance(buffer, bytearray):
+            buffer.clear()
 
-        # Send telegram
-        self._writer.write(telegram)
+        self._writer.write(frame)
         await self._writer.drain()
 
-        # Wait for response with timeout
         try:
-            # Read minimum telegram size first
-            response = await asyncio.wait_for(
-                self._reader.read(1024),
-                timeout=self.timeout,
-            )
-            _LOGGER.debug("Received serial response: %s", response.hex())
-            return response
-
-        except TimeoutError as err:
+            async with asyncio.timeout(self.timeout):
+                attribute, data = await self._read_frame(data_size)
+        except (TimeoutError, asyncio.IncompleteReadError) as err:
             msg = f"Timeout waiting for response from {self.port}"
             raise SBusTimeoutError(msg) from err
+        _LOGGER.debug("Received serial reply: attr=%02X data=%s", attribute, data.hex())
+        return attribute, data

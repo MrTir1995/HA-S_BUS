@@ -2,6 +2,18 @@
 
 This module provides the base class and common functionality for all
 S-Bus protocol variants (Serial-S-Bus, Ether-S-Bus, Profi-S-Bus).
+
+Layering
+--------
+The base class builds the transport independent part of a request, the
+*PDU*::
+
+    <station> <command> <command specific payload>
+
+Each transport wraps the PDU into its own frame (Ether-S-Bus header,
+Serial-S-Bus data mode framing, ...), sends it, validates the reply frame
+(CRC, sequence number, ...) and hands back the reply as ``(attribute, data)``.
+The base class then interprets the reply data.
 """
 
 from __future__ import annotations
@@ -11,14 +23,10 @@ import logging
 import struct
 from abc import ABC
 from abc import abstractmethod
-from typing import TYPE_CHECKING
 from typing import Any
 from typing import ClassVar
 
-if TYPE_CHECKING:
-    from homeassistant.exceptions import HomeAssistantError
-else:
-    from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError
 
 from .const import ATTR_ACK
 from .const import ATTR_REQUEST
@@ -28,10 +36,13 @@ from .const import CMD_READ_REGISTER
 from .const import CMD_WRITE_FLAG
 from .const import CMD_WRITE_REGISTER
 from .const import DEFAULT_TIMEOUT
+from .const import ETHER_SBUS_HEADER_SIZE
+from .const import ETHER_SBUS_PROTOCOL_TYPE
+from .const import ETHER_SBUS_VERSION
+from .const import MAX_FLAG_COUNT
 from .const import MAX_REGISTER_ADDRESS
 from .const import MAX_REGISTER_COUNT
 from .const import MAX_REGISTER_VALUE
-from .const import MIN_TELEGRAM_SIZE
 from .const import SYSREG_FIRMWARE
 from .const import SYSREG_HW_VERSION
 from .const import SYSREG_PRODUCT_TYPE_END
@@ -40,6 +51,13 @@ from .const import SYSREG_SERIAL_END
 from .const import SYSREG_SERIAL_START
 
 _LOGGER = logging.getLogger(__name__)
+
+# Maximum number of flags per S-Bus telegram (limited by the 1 byte count field)
+MAX_FLAGS_PER_TELEGRAM = 128
+# Size of an ACK/NAK reply payload
+ACK_DATA_SIZE = 2
+# Size of the S-Bus CRC
+CRC_SIZE = 2
 
 
 class SBusProtocolError(HomeAssistantError):
@@ -54,6 +72,21 @@ class SBusCRCError(SBusProtocolError):
     """CRC validation error."""
 
 
+class SBusNakError(SBusProtocolError):
+    """The PCD rejected the request (NAK)."""
+
+
+def _build_crc_table() -> list[int]:
+    """Build the CRC-16-CCITT (polynomial 0x1021) lookup table."""
+    table = []
+    for i in range(256):
+        crc = i << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) if crc & 0x8000 else (crc << 1)
+        table.append(crc & 0xFFFF)
+    return table
+
+
 class SBusProtocolBase(ABC):
     """Base class for S-Bus Protocol implementations.
 
@@ -62,264 +95,7 @@ class SBusProtocolBase(ABC):
     """
 
     # CRC-16-CCITT lookup table
-    CRC16_TABLE: ClassVar[list[int]] = [
-        0x0000,
-        0x1021,
-        0x2042,
-        0x3063,
-        0x4084,
-        0x50A5,
-        0x60C6,
-        0x70E7,
-        0x8108,
-        0x9129,
-        0xA14A,
-        0xB16B,
-        0xC18C,
-        0xD1AD,
-        0xE1CE,
-        0xF1EF,
-        0x1231,
-        0x0210,
-        0x3273,
-        0x2252,
-        0x52B5,
-        0x4294,
-        0x72F7,
-        0x62D6,
-        0x9339,
-        0x8318,
-        0xB37B,
-        0xA35A,
-        0xD3BD,
-        0xC39C,
-        0xF3FF,
-        0xE3DE,
-        0x2462,
-        0x3443,
-        0x0420,
-        0x1401,
-        0x64E6,
-        0x74C7,
-        0x44A4,
-        0x5485,
-        0xA56A,
-        0xB54B,
-        0x8528,
-        0x9509,
-        0xE5EE,
-        0xF5CF,
-        0xC5AC,
-        0xD58D,
-        0x3653,
-        0x2672,
-        0x1611,
-        0x0630,
-        0x76D7,
-        0x66F6,
-        0x5695,
-        0x46B4,
-        0xB75B,
-        0xA77A,
-        0x9719,
-        0x8738,
-        0xF7DF,
-        0xE7FE,
-        0xD79D,
-        0xC7BC,
-        0x48C4,
-        0x58E5,
-        0x6886,
-        0x78A7,
-        0x0840,
-        0x1861,
-        0x2802,
-        0x3823,
-        0xC9CC,
-        0xD9ED,
-        0xE98E,
-        0xF9AF,
-        0x8948,
-        0x9969,
-        0xA90A,
-        0xB92B,
-        0x5AF5,
-        0x4AD4,
-        0x7AB7,
-        0x6A96,
-        0x1A71,
-        0x0A50,
-        0x3A33,
-        0x2A12,
-        0xDBFD,
-        0xCBDC,
-        0xFBBF,
-        0xEB9E,
-        0x9B79,
-        0x8B58,
-        0xBB3B,
-        0xAB1A,
-        0x6CA6,
-        0x7C87,
-        0x4CE4,
-        0x5CC5,
-        0x2C22,
-        0x3C03,
-        0x0C60,
-        0x1C41,
-        0xEDAE,
-        0xFD8F,
-        0xCDEC,
-        0xDDCD,
-        0xAD2A,
-        0xBD0B,
-        0x8D68,
-        0x9D49,
-        0x7E97,
-        0x6EB6,
-        0x5ED5,
-        0x4EF4,
-        0x3E13,
-        0x2E32,
-        0x1E51,
-        0x0E70,
-        0xFF9F,
-        0xEFBE,
-        0xDFDD,
-        0xCFFC,
-        0xBF1B,
-        0xAF3A,
-        0x9F59,
-        0x8F78,
-        0x9188,
-        0x81A9,
-        0xB1CA,
-        0xA1EB,
-        0xD10C,
-        0xC12D,
-        0xF14E,
-        0xE16F,
-        0x1080,
-        0x00A1,
-        0x30C2,
-        0x20E3,
-        0x5004,
-        0x4025,
-        0x7046,
-        0x6067,
-        0x83B9,
-        0x9398,
-        0xA3FB,
-        0xB3DA,
-        0xC33D,
-        0xD31C,
-        0xE37F,
-        0xF35E,
-        0x02B1,
-        0x1290,
-        0x22F3,
-        0x32D2,
-        0x4235,
-        0x5214,
-        0x6277,
-        0x7256,
-        0xB5EA,
-        0xA5CB,
-        0x95A8,
-        0x8589,
-        0xF56E,
-        0xE54F,
-        0xD52C,
-        0xC50D,
-        0x34E2,
-        0x24C3,
-        0x14A0,
-        0x0481,
-        0x7466,
-        0x6447,
-        0x5424,
-        0x4405,
-        0xA7DB,
-        0xB7FA,
-        0x8799,
-        0x97B8,
-        0xE75F,
-        0xF77E,
-        0xC71D,
-        0xD73C,
-        0x26D3,
-        0x36F2,
-        0x0691,
-        0x16B0,
-        0x6657,
-        0x7676,
-        0x4615,
-        0x5634,
-        0xD94C,
-        0xC96D,
-        0xF90E,
-        0xE92F,
-        0x99C8,
-        0x89E9,
-        0xB98A,
-        0xA9AB,
-        0x5844,
-        0x4865,
-        0x7806,
-        0x6827,
-        0x18C0,
-        0x08E1,
-        0x3882,
-        0x28A3,
-        0xCB7D,
-        0xDB5C,
-        0xEB3F,
-        0xFB1E,
-        0x8BF9,
-        0x9BD8,
-        0xABBB,
-        0xBB9A,
-        0x4A75,
-        0x5A54,
-        0x6A37,
-        0x7A16,
-        0x0AF1,
-        0x1AD0,
-        0x2AB3,
-        0x3A92,
-        0xFD2E,
-        0xED0F,
-        0xDD6C,
-        0xCD4D,
-        0xBDAA,
-        0xAD8B,
-        0x9DE8,
-        0x8DC9,
-        0x7C26,
-        0x6C07,
-        0x5C64,
-        0x4C45,
-        0x3CA2,
-        0x2C83,
-        0x1CE0,
-        0x0CC1,
-        0xEF1F,
-        0xFF3E,
-        0xCF5D,
-        0xDF7C,
-        0xAF9B,
-        0xBFBA,
-        0x8FD9,
-        0x9FF8,
-        0x6E17,
-        0x7E36,
-        0x4E55,
-        0x5E74,
-        0x2E93,
-        0x3EB2,
-        0x0ED1,
-        0x1EF0,
-    ]
+    CRC16_TABLE: ClassVar[list[int]] = _build_crc_table()
 
     def __init__(self, station: int, timeout: float = DEFAULT_TIMEOUT) -> None:
         """Initialize the S-Bus protocol.
@@ -332,34 +108,35 @@ class SBusProtocolBase(ABC):
         self.station = station
         self.timeout = timeout
         self._lock = asyncio.Lock()
-        self._telegram_counter = 0
 
     @abstractmethod
     async def connect(self) -> None:
-        """Establish connection to the S-Bus device.
-
-        Must be implemented by subclasses for specific transport.
-        """
+        """Establish connection to the S-Bus device."""
 
     @abstractmethod
     async def disconnect(self) -> None:
-        """Close connection to the S-Bus device.
-
-        Must be implemented by subclasses for specific transport.
-        """
+        """Close connection to the S-Bus device."""
 
     @abstractmethod
-    async def _send_and_receive(self, telegram: bytes) -> bytes:
-        """Send telegram and receive response.
+    async def _send_and_receive(self, pdu: bytes, data_size: int) -> tuple[int, bytes]:
+        """Send a request PDU and receive the reply.
 
         Args:
-            telegram: The telegram to send
+            pdu: Request PDU (``station, command, payload``), without
+                attribute byte, framing and CRC.
+            data_size: Expected size of the reply data in bytes for a
+                successful request. Stream transports use it to know how
+                much to read; an ACK/NAK reply is always 2 bytes.
 
         Returns:
-            The response telegram
+            Tuple ``(attribute, data)`` of the validated reply, with framing
+            and CRC already removed.
 
-        Must be implemented by subclasses for specific transport.
         """
+
+    # ------------------------------------------------------------------
+    # CRC
+    # ------------------------------------------------------------------
 
     @staticmethod
     def calculate_crc(data: bytes) -> int:
@@ -367,315 +144,251 @@ class SBusProtocolBase(ABC):
 
         Uses CRC-16-CCITT with polynomial 0x1021 and initial value 0x0000
         as specified in the S-Bus protocol documentation.
-
-        Args:
-            data: Data to calculate CRC for
-
-        Returns:
-            CRC-16 checksum
-
         """
-        crc = 0x0000  # S-Bus uses 0x0000 as initial value, not 0xFFFF
-
+        crc = 0x0000
+        table = SBusProtocolBase.CRC16_TABLE
         for byte in data:
-            crc = ((crc << 8) & 0xFFFF) ^ SBusProtocolBase.CRC16_TABLE[
-                (crc >> 8) ^ byte
-            ]
-
+            crc = ((crc << 8) & 0xFFFF) ^ table[(crc >> 8) ^ byte]
         return crc
 
-    def _build_telegram(
-        self,
-        cmd: int,
-        address: int,
-        count: int,
-        data: bytes = b"",
-    ) -> bytes:
-        """Build an S-Bus telegram.
+    # ------------------------------------------------------------------
+    # Ether-S-Bus framing (also used by Profi-S-Bus)
+    # ------------------------------------------------------------------
 
-        Args:
-            cmd: Command opcode
-            address: Register or flag address
-            count: Number of registers/flags
-            data: Optional data payload
+    @classmethod
+    def build_ether_frame(
+        cls, sequence: int, pdu: bytes, attribute: int = ATTR_REQUEST
+    ) -> bytes:
+        """Wrap a PDU into an Ether-S-Bus frame.
+
+        Frame layout::
+
+            length(4) version(1) type(1) sequence(2) attribute(1) PDU crc(2)
+
+        ``length`` is the size of the complete frame including header and
+        CRC; the CRC covers everything from the length field up to the end
+        of the PDU.
+        """
+        length = ETHER_SBUS_HEADER_SIZE + 1 + len(pdu) + CRC_SIZE
+        frame = (
+            struct.pack(
+                "!IBBHB",
+                length,
+                ETHER_SBUS_VERSION,
+                ETHER_SBUS_PROTOCOL_TYPE,
+                sequence & 0xFFFF,
+                attribute,
+            )
+            + pdu
+        )
+        return frame + struct.pack("!H", cls.calculate_crc(frame))
+
+    @classmethod
+    def parse_ether_frame(cls, frame: bytes) -> tuple[int, int, bytes]:
+        """Validate an Ether-S-Bus reply frame.
 
         Returns:
-            Complete telegram with CRC
-
-        """
-        self._telegram_counter = (self._telegram_counter + 1) % 256
-
-        # Build header: telegram_nr, dest_addr, attr, opcode
-        header = struct.pack(
-            "BBBB",
-            self._telegram_counter,
-            self.station,
-            ATTR_REQUEST,
-            cmd,
-        )
-
-        # Build address and count fields
-        addr_count = struct.pack("!HH", address, count)
-
-        # Combine all parts
-        telegram_body = header + addr_count + data
-
-        # Calculate and append CRC
-        crc = self.calculate_crc(telegram_body)
-        telegram = telegram_body + struct.pack("!H", crc)
-
-        return telegram
-
-    def _validate_telegram(self, telegram: bytes) -> None:
-        """Validate received telegram.
-
-        Args:
-            telegram: The received telegram
+            Tuple ``(sequence, attribute, data)``.
 
         Raises:
-            SBusCRCError: If CRC validation fails
-            SBusProtocolError: For other validation errors
+            SBusProtocolError: If the frame is malformed.
+            SBusCRCError: If the CRC does not match.
 
         """
-        if len(telegram) < MIN_TELEGRAM_SIZE:
-            msg = f"Telegram too short: {len(telegram)} bytes"
+        min_size = ETHER_SBUS_HEADER_SIZE + 1 + CRC_SIZE
+        if len(frame) < min_size:
+            msg = f"Ether-S-Bus frame too short: {len(frame)} bytes"
             raise SBusProtocolError(msg)
 
-        # Extract and verify CRC
-        data = telegram[:-2]
-        received_crc = struct.unpack("!H", telegram[-2:])[0]
-        calculated_crc = self.calculate_crc(data)
+        length, _version, _ptype, sequence, attribute = struct.unpack(
+            "!IBBHB", frame[: ETHER_SBUS_HEADER_SIZE + 1]
+        )
+        if length != len(frame):
+            msg = (
+                f"Ether-S-Bus length mismatch: header says {length}, "
+                f"got {len(frame)} bytes"
+            )
+            raise SBusProtocolError(msg)
 
+        received_crc = struct.unpack("!H", frame[-CRC_SIZE:])[0]
+        calculated_crc = cls.calculate_crc(frame[:-CRC_SIZE])
         if received_crc != calculated_crc:
             msg = f"CRC mismatch: expected {calculated_crc:04X}, got {received_crc:04X}"
             raise SBusCRCError(msg)
 
-        # Verify it's a response
-        attr = telegram[2]
-        if attr not in (ATTR_RESPONSE, ATTR_ACK):
-            msg = f"Invalid attribute byte: {attr:02X}"
+        return sequence, attribute, frame[ETHER_SBUS_HEADER_SIZE + 1 : -CRC_SIZE]
+
+    # ------------------------------------------------------------------
+    # Request / reply handling
+    # ------------------------------------------------------------------
+
+    def _build_pdu(self, cmd: int, payload: bytes) -> bytes:
+        """Build a request PDU: ``station, command, payload``."""
+        return bytes([self.station & 0xFF, cmd & 0xFF]) + payload
+
+    async def _request_data(self, cmd: int, payload: bytes, data_size: int) -> bytes:
+        """Send a read request and return the reply data."""
+        pdu = self._build_pdu(cmd, payload)
+        async with self._lock:
+            attribute, data = await self._send_and_receive(pdu, data_size)
+
+        if attribute == ATTR_ACK:
+            self._raise_for_ack(data)
+            msg = "PCD answered a read request with ACK instead of data"
             raise SBusProtocolError(msg)
+        if attribute != ATTR_RESPONSE:
+            msg = f"Invalid attribute byte: {attribute:02X}"
+            raise SBusProtocolError(msg)
+        if len(data) != data_size:
+            msg = f"Unexpected reply size: expected {data_size} bytes, got {len(data)}"
+            raise SBusProtocolError(msg)
+        return data
 
-    async def read_registers(
-        self,
-        address: int,
-        count: int = 1,
-    ) -> list[int]:
-        """Read PCD registers.
+    async def _request_ack(self, cmd: int, payload: bytes) -> None:
+        """Send a write request and check the ACK."""
+        pdu = self._build_pdu(cmd, payload)
+        async with self._lock:
+            attribute, data = await self._send_and_receive(pdu, ACK_DATA_SIZE)
 
-        Args:
-            address: Starting register address (0-9999)
-            count: Number of registers to read (1-32)
+        if attribute != ATTR_ACK:
+            msg = f"Expected ACK, got attribute {attribute:02X}"
+            raise SBusProtocolError(msg)
+        self._raise_for_ack(data)
 
-        Returns:
-            List of register values
+    @staticmethod
+    def _raise_for_ack(data: bytes) -> None:
+        """Raise SBusNakError if an ACK reply carries a NAK code."""
+        if len(data) < ACK_DATA_SIZE:
+            msg = f"ACK reply too short: {len(data)} bytes"
+            raise SBusProtocolError(msg)
+        code = struct.unpack("!H", data[:ACK_DATA_SIZE])[0]
+        if code != 0:
+            msg = f"PCD rejected the request (NAK code {code})"
+            raise SBusNakError(msg)
 
-        Raises:
-            ValueError: If parameters are out of range
-            SBusTimeoutError: If communication times out
-            SBusProtocolError: For protocol errors
-
-        """
+    @staticmethod
+    def _check_register_address(address: int) -> None:
         if not 0 <= address <= MAX_REGISTER_ADDRESS:
             msg = f"Address {address} out of range (0-{MAX_REGISTER_ADDRESS})"
             raise ValueError(msg)
 
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    async def read_registers(self, address: int, count: int = 1) -> list[int]:
+        """Read PCD registers.
+
+        Request payload: ``count-1 (1 byte), address (2 bytes)``.
+        Reply data: ``count`` big endian 32 bit values.
+        """
+        self._check_register_address(address)
         if not 1 <= count <= MAX_REGISTER_COUNT:
             msg = f"Count {count} out of range (1-{MAX_REGISTER_COUNT})"
             raise ValueError(msg)
 
-        telegram = self._build_telegram(CMD_READ_REGISTER, address, count)
+        payload = struct.pack("!BH", count - 1, address)
+        data = await self._request_data(CMD_READ_REGISTER, payload, 4 * count)
+        return list(struct.unpack(f"!{count}I", data))
 
-        async with self._lock:
-            response = await self._send_and_receive(telegram)
-            self._validate_telegram(response)
-
-            # Parse response data (skip header and CRC)
-            data = response[8:-2]
-
-            # Each register is 4 bytes (32-bit)
-            registers = []
-            for i in range(count):
-                reg_value = struct.unpack("!I", data[i * 4 : (i + 1) * 4])[0]
-                registers.append(reg_value)
-
-            return registers
-
-    async def write_register(
-        self,
-        address: int,
-        value: int,
-    ) -> None:
+    async def write_register(self, address: int, value: int) -> None:
         """Write a PCD register.
 
-        Args:
-            address: Register address (0-9999)
-            value: Value to write (0-0xFFFFFFFF)
-
-        Raises:
-            ValueError: If parameters are out of range
-            SBusTimeoutError: If communication times out
-            SBusProtocolError: For protocol errors
-
+        Request payload: ``byte count + 1 (1 byte), address (2 bytes),
+        value (4 bytes)``.
         """
-        if not 0 <= address <= MAX_REGISTER_ADDRESS:
-            msg = f"Address {address} out of range (0-{MAX_REGISTER_ADDRESS})"
-            raise ValueError(msg)
-
+        self._check_register_address(address)
         if not 0 <= value <= MAX_REGISTER_VALUE:
             msg = f"Value {value} out of range (0-{MAX_REGISTER_VALUE})"
             raise ValueError(msg)
 
-        data = struct.pack("!I", value)
-        telegram = self._build_telegram(CMD_WRITE_REGISTER, address, 1, data)
+        payload = struct.pack("!BHI", 4 + 1, address, value)
+        await self._request_ack(CMD_WRITE_REGISTER, payload)
 
-        async with self._lock:
-            response = await self._send_and_receive(telegram)
-            self._validate_telegram(response)
-
-    async def read_flags(
-        self,
-        address: int,
-        count: int = 1,
-    ) -> list[bool]:
+    async def read_flags(self, address: int, count: int = 1) -> list[bool]:
         """Read PCD flags.
 
-        Args:
-            address: Starting flag address
-            count: Number of flags to read
-
-        Returns:
-            List of flag states
-
-        Raises:
-            ValueError: If parameters are out of range
-            SBusTimeoutError: If communication times out
-            SBusProtocolError: For protocol errors
-
+        Request payload: ``count-1 (1 byte), address (2 bytes)``.
+        Reply data: flags packed into bytes, first flag in bit 0.
+        Requests for more than 128 flags are split into several telegrams.
         """
-        telegram = self._build_telegram(CMD_READ_FLAG, address, count)
+        if not 1 <= count <= MAX_FLAG_COUNT:
+            msg = f"Count {count} out of range (1-{MAX_FLAG_COUNT})"
+            raise ValueError(msg)
+        if address < 0 or address + count - 1 > 0xFFFF:
+            msg = f"Flag address range {address}+{count} out of range"
+            raise ValueError(msg)
 
-        async with self._lock:
-            response = await self._send_and_receive(telegram)
-            self._validate_telegram(response)
+        flags: list[bool] = []
+        offset = 0
+        while offset < count:
+            chunk = min(MAX_FLAGS_PER_TELEGRAM, count - offset)
+            payload = struct.pack("!BH", chunk - 1, address + offset)
+            data = await self._request_data(CMD_READ_FLAG, payload, (chunk + 7) // 8)
+            flags.extend(bool(data[i // 8] & (1 << (i % 8))) for i in range(chunk))
+            offset += chunk
+        return flags
 
-            # Parse response data (skip header and CRC)
-            data = response[8:-2]
-
-            # Flags are packed as bits
-            flags = []
-            for byte in data:
-                for bit in range(8):
-                    if len(flags) < count:
-                        flags.append(bool(byte & (1 << bit)))
-
-            return flags[:count]
-
-    async def write_flag(
-        self,
-        address: int,
-        value: bool,
-    ) -> None:
+    async def write_flag(self, address: int, value: bool) -> None:
         """Write a PCD flag.
 
-        Args:
-            address: Flag address
-            value: Flag state
-
-        Raises:
-            ValueError: If parameters are out of range
-            SBusTimeoutError: If communication times out
-            SBusProtocolError: For protocol errors
-
+        Request payload: ``byte count + 2 (1 byte), address (2 bytes),
+        flag count - 1 (1 byte), packed flag data``.
         """
-        data = struct.pack("B", 1 if value else 0)
-        telegram = self._build_telegram(CMD_WRITE_FLAG, address, 1, data)
+        if not 0 <= address <= 0xFFFF:
+            msg = f"Flag address {address} out of range"
+            raise ValueError(msg)
 
-        async with self._lock:
-            response = await self._send_and_receive(telegram)
-            self._validate_telegram(response)
+        payload = struct.pack("!BHBB", 1 + 2, address, 0, 1 if value else 0)
+        await self._request_ack(CMD_WRITE_FLAG, payload)
 
     async def get_device_info(self) -> dict[str, Any]:
-        """Get comprehensive device information.
+        """Get device information from the PCD system registers.
 
-        Returns:
-            Dictionary with device information including:
-            - firmware_version: Firmware version number
-            - product_type: Product name (e.g., "PCD3.M5540")
-            - hw_version: Hardware version number
-            - serial_number: Device serial number
-            - firmware_version_str: Formatted firmware version
-            - hw_version_str: Formatted hardware version
-
-        Raises:
-            SBusTimeoutError: If communication times out
-            SBusProtocolError: For protocol errors
-
+        The first read is not wrapped: if the PCD does not answer at all,
+        the error propagates so the caller (config flow, setup) can report
+        that the device is unreachable instead of silently creating a
+        "SAIA PCD (Unknown)" device. Later reads are optional because not
+        every PCD/firmware provides all of these system registers.
         """
-        try:
-            # Read firmware version
-            firmware_raw = await self.read_registers(SYSREG_FIRMWARE, 1)
-            firmware_version = firmware_raw[0]
+        firmware_version = (await self.read_registers(SYSREG_FIRMWARE, 1))[0]
 
-            # Read product type (4 registers, ASCII string)
+        product_type = ""
+        hw_version = 0
+        serial_number = "UNKNOWN"
+        try:
             product_type_raw = await self.read_registers(
                 SYSREG_PRODUCT_TYPE_START,
                 SYSREG_PRODUCT_TYPE_END - SYSREG_PRODUCT_TYPE_START + 1,
             )
-            product_type_bytes = b"".join(
-                struct.pack("!I", reg) for reg in product_type_raw
+            product_type = (
+                b"".join(struct.pack("!I", reg) for reg in product_type_raw)
+                .decode("ascii", errors="ignore")
+                .strip("\x00 ")
             )
-            product_type = product_type_bytes.decode("ascii", errors="ignore").strip("\x00")
-
-            # Read hardware version
-            hw_version_raw = await self.read_registers(SYSREG_HW_VERSION, 1)
-            hw_version = hw_version_raw[0]
-
-            # Read serial number (2 registers)
+            hw_version = (await self.read_registers(SYSREG_HW_VERSION, 1))[0]
             serial_raw = await self.read_registers(
                 SYSREG_SERIAL_START,
                 SYSREG_SERIAL_END - SYSREG_SERIAL_START + 1,
             )
             serial_number = f"{serial_raw[0]:08X}{serial_raw[1]:08X}"
+        except SBusProtocolError as err:
+            _LOGGER.warning("Could not read all device information: %s", err)
 
-            # Format version strings for better readability
-            firmware_version_str = self._format_version(firmware_version)
-            hw_version_str = self._format_version(hw_version)
-
-            return {
-                "firmware_version": firmware_version,
-                "product_type": product_type if product_type else "SAIA PCD",
-                "hw_version": hw_version,
-                "serial_number": serial_number,
-                "firmware_version_str": firmware_version_str,
-                "hw_version_str": hw_version_str,
-            }
-        except Exception as err:
-            _LOGGER.error("Failed to read device information: %s", err)
-            # Return minimal info if read fails
-            return {
-                "firmware_version": 0,
-                "product_type": "SAIA PCD (Unknown)",
-                "hw_version": 0,
-                "serial_number": "UNKNOWN",
-                "firmware_version_str": "Unknown",
-                "hw_version_str": "Unknown",
-            }
+        return {
+            "firmware_version": firmware_version,
+            "product_type": product_type or "SAIA PCD",
+            "hw_version": hw_version,
+            "serial_number": serial_number,
+            "firmware_version_str": self._format_version(firmware_version),
+            "hw_version_str": self._format_version(hw_version),
+        }
 
     @staticmethod
     def _format_version(version: int) -> str:
-        """Format version number to readable string.
-
-        Args:
-            version: Raw version number
-
-        Returns:
-            Formatted version string (e.g., "1.23.45")
-
-        """
+        """Format version number to readable string (Major.Minor.Patch)."""
         if version == 0:
             return "Unknown"
-        # Version format: Major.Minor.Patch
         major = (version >> 16) & 0xFF
         minor = (version >> 8) & 0xFF
         patch = version & 0xFF
