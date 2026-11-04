@@ -23,6 +23,7 @@ from .const import PROTOCOL_PROFI_SBUS
 from .const import PROTOCOL_SERIAL_SBUS
 from .ether_sbus import EtherSBusProtocol
 from .profi_sbus import ProfiSBusProtocol
+from .sbus_protocol_base import SBusConnectionError
 from .sbus_protocol_base import SBusCRCError
 from .sbus_protocol_base import SBusProtocolBase
 from .sbus_protocol_base import SBusProtocolError
@@ -38,6 +39,7 @@ __all__ = [
     "SBusProtocolError",
     "SBusTimeoutError",
     "SBusCRCError",
+    "SBusConnectionError",
     "create_sbus_protocol",
 ]
 

@@ -92,5 +92,12 @@
         "float": "Gleitkomma (IEEE 754)"
       }
     }
+  },
+  "config": {
+    "error": {
+      "cannot_connect_tcp": "Die PCD hat die TCP-Verbindung abgelehnt oder nicht geantwortet. Ether-S-Bus läuft normalerweise über UDP – bitte UDP als Verbindungstyp wählen.",
+      "cannot_connect": "Verbindung zum Gerät fehlgeschlagen. Bitte Host, Port und Verbindungseinstellungen prüfen.",
+      "timeout": "Die PCD antwortet nicht. Bitte IP-Adresse, Port, S-Bus-Stationsnummer prüfen und ob Ether-S-Bus auf der PCD aktiviert ist."
+    }
   }
 }

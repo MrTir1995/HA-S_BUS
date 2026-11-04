@@ -52,6 +52,8 @@ class FakePCD(asyncio.DatagramProtocol):
         self.silent = False
         self.answer_with_wrong_sequence_first = False
         self.corrupt_first_answer = False
+        self.nak_registers: set[int] = set()
+        self.max_answers: int | None = None
         self.transport: asyncio.DatagramTransport | None = None
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
@@ -63,6 +65,10 @@ class FakePCD(asyncio.DatagramProtocol):
         self.requests.append(data)
         if self.silent:
             return
+        if self.max_answers is not None:
+            if self.max_answers <= 0:
+                return
+            self.max_answers -= 1
         sequence, attribute, pdu = SBusProtocolBase.parse_ether_frame(data)
         assert attribute == 0x00
         station, cmd, payload = pdu[0], pdu[1], pdu[2:]
@@ -87,6 +93,8 @@ class FakePCD(asyncio.DatagramProtocol):
         if cmd == CMD_READ_REGISTER:
             count = payload[0] + 1
             address = struct.unpack("!H", payload[1:3])[0]
+            if any(address + i in self.nak_registers for i in range(count)):
+                return ATTR_ACK, b"\x00\x01"
             values = [self.registers.get(address + i, 0) for i in range(count)]
             return ATTR_RESPONSE, struct.pack(f"!{count}I", *values)
         if cmd == CMD_READ_FLAG:

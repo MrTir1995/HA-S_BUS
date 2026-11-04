@@ -97,6 +97,7 @@ MAX_STATION_ADDRESS: Final = 253
 
 # Error messages
 ERROR_CANNOT_CONNECT: Final = "cannot_connect"
+ERROR_CANNOT_CONNECT_TCP: Final = "cannot_connect_tcp"
 ERROR_INVALID_AUTH: Final = "invalid_auth"
 ERROR_UNKNOWN: Final = "unknown"
 ERROR_TIMEOUT: Final = "timeout"

@@ -16,6 +16,7 @@ from .const import DEFAULT_TIMEOUT
 from .const import SBUS_ESCAPE_CHAR
 from .const import SBUS_FRAME_START
 from .sbus_protocol_base import ACK_DATA_SIZE
+from .sbus_protocol_base import SBusConnectionError
 from .sbus_protocol_base import SBusCRCError
 from .sbus_protocol_base import SBusProtocolBase
 from .sbus_protocol_base import SBusProtocolError
@@ -56,6 +57,11 @@ class SerialSBusProtocol(SBusProtocolBase):
         self._writer: asyncio.StreamWriter | None = None
         self._serial = None
 
+    @property
+    def endpoint_id(self) -> str:
+        """Identity of the configured endpoint (port, station)."""
+        return f"{self.port}:{self.station}"
+
     async def connect(self) -> None:
         """Establish connection to the S-Bus device via Serial-S-Bus."""
         if self.use_tcp:
@@ -71,15 +77,19 @@ class SerialSBusProtocol(SBusProtocolBase):
             msg = "pyserial-asyncio is required for serial connections"
             raise ImportError(msg) from err
 
-        # Open serial port
-        self._reader, self._writer = await serial_asyncio.open_serial_connection(
-            url=self.port,
-            baudrate=self.baudrate,
-            bytesize=8,
-            parity="N",  # Data mode (SM2) uses 8N1, parity is only used in parity mode
-            stopbits=1,
-            timeout=self.timeout,
-        )
+        # Open serial port (SerialException is an OSError)
+        try:
+            self._reader, self._writer = await serial_asyncio.open_serial_connection(
+                url=self.port,
+                baudrate=self.baudrate,
+                bytesize=8,
+                parity="N",  # Data mode (SM2) uses 8N1, parity is only used in parity mode
+                stopbits=1,
+                timeout=self.timeout,
+            )
+        except OSError as err:
+            msg = f"Could not open serial port {self.port}: {err}"
+            raise SBusConnectionError(msg) from err
 
         _LOGGER.debug(
             "Connected to %s at %d baud (station %d)",
@@ -98,10 +108,14 @@ class SerialSBusProtocol(SBusProtocolBase):
             msg = f"Invalid TCP serial address: {self.port}. Expected format: host:port"
             raise ValueError(msg)
 
-        self._reader, self._writer = await asyncio.open_connection(
-            host,
-            port,
-        )
+        try:
+            self._reader, self._writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port), timeout=self.timeout
+            )
+        except (OSError, TimeoutError) as err:
+            reason = "timed out" if isinstance(err, TimeoutError) else str(err)
+            msg = f"Could not connect to serial bridge {self.port} ({reason})"
+            raise SBusConnectionError(msg) from err
 
         _LOGGER.debug(
             "Connected to %s via TCP serial bridge (station %d)",
