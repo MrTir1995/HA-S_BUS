@@ -14,6 +14,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 
 ## [0.4.3] - 2026-11-05
 
+### Behoben
+- PCDs, die auf die Seriennummer-Register (R 611/612) oder andere optionale
+  Systemregister gar nicht antworten, ließen sich mit 0.4.2 nicht mehr
+  einrichten („wird nicht mehr von der sbus-Integration bereitgestellt“).
+  Fehlt eine Antwort, wird jetzt mit R 600 geprüft, ob die PCD erreichbar ist;
+  das Register gilt dann als nicht vorhanden.
+- Ändert sich die Gerätekennung (z. B. vom bisherigen Platzhalter „UNKNOWN“
+  auf IP/Port/Station), werden Gerät und Entitäten übernommen statt neu
+  angelegt. Entitäts-IDs, Namen, Bereiche und Verlauf bleiben erhalten.
+
 ### Geändert
 - `pyserial-asyncio` durch `serialx` ersetzt, wie von Home Assistant
   gefordert (die alte Bibliothek funktioniert ab Home Assistant 2027.2 nicht
