@@ -53,6 +53,7 @@ class FakePCD(asyncio.DatagramProtocol):
         self.answer_with_wrong_sequence_first = False
         self.corrupt_first_answer = False
         self.nak_registers: set[int] = set()
+        self.ignore_registers: set[int] = set()
         self.max_answers: int | None = None
         self.transport: asyncio.DatagramTransport | None = None
 
@@ -75,7 +76,10 @@ class FakePCD(asyncio.DatagramProtocol):
         if station != STATION:
             return  # a real PCD ignores telegrams for other stations
 
-        reply_attr, reply_data = self._handle(cmd, payload)
+        handled = self._handle(cmd, payload)
+        if handled is None:
+            return
+        reply_attr, reply_data = handled
         frame = SBusProtocolBase.build_ether_frame(sequence, reply_data, reply_attr)
         assert self.transport is not None
         if self.answer_with_wrong_sequence_first:
@@ -89,10 +93,12 @@ class FakePCD(asyncio.DatagramProtocol):
             self.transport.sendto(frame[:-2] + b"\xff\xff", addr)
         self.transport.sendto(frame, addr)
 
-    def _handle(self, cmd: int, payload: bytes) -> tuple[int, bytes]:
+    def _handle(self, cmd: int, payload: bytes) -> tuple[int, bytes] | None:
         if cmd == CMD_READ_REGISTER:
             count = payload[0] + 1
             address = struct.unpack("!H", payload[1:3])[0]
+            if any(address + i in self.ignore_registers for i in range(count)):
+                return None  # no answer at all, like some PCDs do
             if any(address + i in self.nak_registers for i in range(count)):
                 return ATTR_ACK, b"\x00\x01"
             values = [self.registers.get(address + i, 0) for i in range(count)]

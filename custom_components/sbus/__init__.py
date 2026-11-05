@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import struct
 from typing import TYPE_CHECKING
 
@@ -99,6 +100,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "protocol": protocol,
         "device_info": device_info,
     }
+
+    _migrate_identity(hass, entry, device_info["serial_number"])
 
     # Register device in device registry
     device_registry = dr.async_get(hass)
@@ -232,6 +235,57 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     return True
+
+
+_UNIQUE_ID_RE = re.compile(r"^(?P<serial>.+)_(?P<kind>register|flag_switch|flag)_(?P<address>\d+)$")
+
+
+def _migrate_identity(hass: HomeAssistant, entry: ConfigEntry, serial: str) -> None:
+    """Move entities, device and entry to a changed device identity.
+
+    The identity changes e.g. from the old "UNKNOWN" placeholder to the
+    endpoint based fallback, or when a serial number becomes readable.
+    Updating the unique ids keeps entity ids, names, areas and history.
+    """
+    entity_registry = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(entity_registry, entry.entry_id):
+        match = _UNIQUE_ID_RE.match(entity.unique_id)
+        if not match or match["serial"] == serial:
+            continue
+        new_unique_id = f"{serial}_{match['kind']}_{match['address']}"
+        if entity_registry.async_get_entity_id(entity.domain, DOMAIN, new_unique_id):
+            continue
+        _LOGGER.info(
+            "Migrating %s from unique id %s to %s",
+            entity.entity_id,
+            entity.unique_id,
+            new_unique_id,
+        )
+        entity_registry.async_update_entity(
+            entity.entity_id, new_unique_id=new_unique_id
+        )
+
+    device_registry = dr.async_get(hass)
+    new_identifier = (DOMAIN, serial)
+    for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id):
+        if new_identifier in device.identifiers:
+            continue
+        if device_registry.async_get_device(identifiers={new_identifier}):
+            continue
+        device_registry.async_update_device(
+            device.id,
+            new_identifiers={
+                new_identifier,
+                *(i for i in device.identifiers if i[0] != DOMAIN),
+            },
+        )
+
+    if entry.unique_id != serial and not any(
+        other.unique_id == serial
+        for other in hass.config_entries.async_entries(DOMAIN)
+        if other.entry_id != entry.entry_id
+    ):
+        hass.config_entries.async_update_entry(entry, unique_id=serial)
 
 
 def _remove_stale_entities(

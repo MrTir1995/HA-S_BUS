@@ -378,40 +378,53 @@ class SBusProtocolBase(ABC):
     async def get_device_info(self) -> dict[str, Any]:
         """Get device information from the PCD system registers.
 
-        Timeouts always propagate, so an unresponsive PCD is never set up.
-        The product type, hardware version and serial number registers are
-        optional: if the PCD rejects them, defaults are used and the
-        configured endpoint (address and station) serves as identity, so
-        several such PCDs do not collide.
+        R 600 (firmware) must answer, otherwise the PCD counts as unreachable.
+        Product type, hardware version and serial number are optional: some
+        PCDs reject these registers (NAK), others simply don't answer. If one
+        of them times out, R 600 is read again; if that answers too, the
+        register is treated as unsupported, otherwise the timeout propagates.
+        Without a serial number the configured endpoint (address and
+        station) is used as identity.
         """
         firmware_version = (await self.read_registers(SYSREG_FIRMWARE, 1))[0]
 
         product_type = ""
         hw_version = 0
         serial_number = self.endpoint_id
-        try:
-            product_type_raw = await self.read_registers(
-                SYSREG_PRODUCT_TYPE_START,
-                SYSREG_PRODUCT_TYPE_END - SYSREG_PRODUCT_TYPE_START + 1,
-            )
+
+        async def optional(address: int, count: int) -> list[int] | None:
+            try:
+                return await self._read_optional(address, count)
+            except SBusTimeoutError:
+                # Still reachable? Then the register is just not supported.
+                await self.read_registers(SYSREG_FIRMWARE, 1)
+                _LOGGER.debug("PCD does not answer R%d, treating as unsupported", address)
+                return None
+            except SBusProtocolError as err:
+                _LOGGER.debug("PCD rejected R%d: %s", address, err)
+                return None
+
+        raw = await optional(
+            SYSREG_PRODUCT_TYPE_START,
+            SYSREG_PRODUCT_TYPE_END - SYSREG_PRODUCT_TYPE_START + 1,
+        )
+        if raw is not None:
             product_type = (
-                b"".join(struct.pack("!I", reg) for reg in product_type_raw)
+                b"".join(struct.pack("!I", reg) for reg in raw)
                 .decode("ascii", errors="ignore")
                 .strip("\x00 ")
             )
-            hw_version = (await self.read_registers(SYSREG_HW_VERSION, 1))[0]
-            serial_raw = await self.read_registers(
-                SYSREG_SERIAL_START,
-                SYSREG_SERIAL_END - SYSREG_SERIAL_START + 1,
-            )
-            serial_number = f"{serial_raw[0]:08X}{serial_raw[1]:08X}"
-        except SBusTimeoutError:
-            raise
-        except SBusProtocolError as err:
-            _LOGGER.warning(
-                "Could not read all device information, using %s as identity: %s",
-                serial_number,
-                err,
+        raw = await optional(SYSREG_HW_VERSION, 1)
+        if raw is not None:
+            hw_version = raw[0]
+        raw = await optional(
+            SYSREG_SERIAL_START, SYSREG_SERIAL_END - SYSREG_SERIAL_START + 1
+        )
+        if raw is not None:
+            serial_number = f"{raw[0]:08X}{raw[1]:08X}"
+        else:
+            _LOGGER.info(
+                "PCD provides no serial number, using %s as identity", serial_number
             )
 
         return {
@@ -422,6 +435,17 @@ class SBusProtocolBase(ABC):
             "firmware_version_str": self._format_version(firmware_version),
             "hw_version_str": self._format_version(hw_version),
         }
+
+    async def _read_optional(self, address: int, count: int) -> list[int]:
+        """Read registers that may not exist, without the usual retries."""
+        retries = getattr(self, "_max_retries", None)
+        if retries is None:
+            return await self.read_registers(address, count)
+        self._max_retries = 1
+        try:
+            return await self.read_registers(address, count)
+        finally:
+            self._max_retries = retries
 
     @staticmethod
     def _format_version(version: int) -> str:

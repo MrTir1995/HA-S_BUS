@@ -171,18 +171,19 @@ class EtherSBusProtocol(SBusProtocolBase):
                     )
                     await asyncio.sleep(wait_time)
 
-        _LOGGER.error(
-            "No answer from %s:%d (station %d) after %d attempts. Check IP, "
-            "port, S-Bus station number and that Ether-S-Bus is enabled on the PCD",
+        # Logged once per outage by the coordinator; keep this at debug level
+        _LOGGER.debug(
+            "No answer from %s:%d (station %d) after %d attempts",
             self.host,
             self.port,
             self.station,
             self._max_retries,
         )
-        if last_error:
-            raise last_error
-        msg = f"Communication failed after {self._max_retries} attempts"
-        raise SBusTimeoutError(msg)
+        msg = (
+            f"No answer from {self.host}:{self.port} (station {self.station}) "
+            f"after {self._max_retries} attempts"
+        )
+        raise SBusTimeoutError(msg) from last_error
 
     def _get_next_sequence(self) -> int:
         """Get next sequence number for Ether-S-Bus packets (0-65535, wraps)."""
@@ -296,7 +297,9 @@ class _EtherSBusDatagramProtocol(asyncio.DatagramProtocol):
 
     def error_received(self, exc: Exception) -> None:
         """Called when an error is received."""
-        _LOGGER.error("Datagram error received: %s", exc)
+        # e.g. ICMP "port unreachable" while the PCD restarts; the request
+        # then times out and is retried, so this is not worth an error entry
+        _LOGGER.debug("Datagram error received: %s", exc)
 
     async def get_response(self) -> bytes:
         """Wait for and return the next response."""
