@@ -45,14 +45,13 @@ def _reply_for(pcd: FakePCD, request: bytes, sequence: int | None = None) -> byt
 
 
 @pytest.mark.parametrize("offset", [4, 5])
-def test_unsupported_version_or_type_rejected(offset: int) -> None:
-    """Frames with another version or protocol type are rejected."""
-    frame = bytearray(SBusProtocolBase.build_ether_frame(1, b"\x00" * 4, 0x01))
+def test_other_version_or_type_accepted(offset: int) -> None:
+    """Replies with another version/type byte are accepted (real PCDs vary)."""
+    frame = bytearray(SBusProtocolBase.build_ether_frame(7, b"\x00" * 4, 0x01))
     frame[offset] = 0x7F
     body = bytes(frame[:-2])
     frame[-2:] = struct.pack("!H", SBusProtocolBase.calculate_crc(body))
-    with pytest.raises(SBusProtocolError, match="Unsupported"):
-        SBusProtocolBase.parse_ether_frame(bytes(frame))
+    assert SBusProtocolBase.parse_ether_frame(bytes(frame)) == (7, 0x01, b"\x00" * 4)
 
 
 # ----------------------------------------------------------------------
