@@ -217,11 +217,12 @@ class SBusProtocolBase(ABC):
             "!IBBHB", frame[: ETHER_SBUS_HEADER_SIZE + 1]
         )
         if version != ETHER_SBUS_VERSION or ptype != ETHER_SBUS_PROTOCOL_TYPE:
-            msg = (
-                f"Unsupported Ether-S-Bus frame (version {version:02X}, "
-                f"type {ptype:02X})"
+            # Real PCDs don't always echo the values we send, so these fields
+            # are not used to reject replies; length, CRC and the sequence
+            # number already identify a valid answer to our request.
+            _LOGGER.debug(
+                "Ether-S-Bus reply with version %02X, type %02X", version, ptype
             )
-            raise SBusProtocolError(msg)
         if length != len(frame):
             msg = (
                 f"Ether-S-Bus length mismatch: header says {length}, "

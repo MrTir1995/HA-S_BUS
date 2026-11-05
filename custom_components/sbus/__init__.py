@@ -78,7 +78,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await protocol.disconnect()
         protocol_info = entry.data.get("protocol_type", "S-Bus")
         connection_info = entry.data.get(CONF_HOST, entry.data.get("serial_port", "device"))
-        msg = f"Failed to connect to {protocol_info} device at {connection_info}"
+        msg = f"Failed to connect to {protocol_info} device at {connection_info}: {err}"
         raise ConfigEntryNotReady(msg) from err
 
     # Create data update coordinator

@@ -11,6 +11,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.sbus.const import DOMAIN
+from custom_components.sbus.sbus_protocol_base import SBusProtocolBase
 
 from .test_sbus_protocol import STATION
 from .test_sbus_protocol import FakePCD
@@ -116,3 +117,30 @@ async def test_migrates_from_unknown_identity(
     devices = dr.async_entries_for_config_entry(device_registry, entry.entry_id)
     assert [d.id for d in devices] == [old_device.id]
     assert (DOMAIN, identity) in devices[0].identifiers
+
+
+async def test_setup_with_pcd_using_other_header_values(
+    hass,
+    enable_custom_integrations,  # noqa: ARG001
+    silent_serial_pcd,
+    monkeypatch,
+) -> None:
+    """A PCD answering with other version/type bytes can be set up."""
+    pcd, port = silent_serial_pcd
+    original = SBusProtocolBase.build_ether_frame
+
+    def pcd_frame(sequence, pdu, attribute=0):
+        frame = bytearray(original(sequence, pdu, attribute))
+        if attribute != 0:  # only replies from the PCD
+            frame[4], frame[5] = 0x00, 0x01
+            frame[-2:] = SBusProtocolBase.calculate_crc(bytes(frame[:-2])).to_bytes(
+                2, "big"
+            )
+        return bytes(frame)
+
+    monkeypatch.setattr(SBusProtocolBase, "build_ether_frame", staticmethod(pcd_frame))
+    entry = _entry(port, None)
+    entry.add_to_hass(hass)
+    await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED

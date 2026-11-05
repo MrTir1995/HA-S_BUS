@@ -12,6 +12,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Unterstützung für Timer und Counter Entitäten
 - Diagnostics Support
 
+## [0.4.5] - 2026-11-05
+
+### Behoben
+- Seit 0.4.2 wurden Antworten verworfen, wenn Version oder Typ im
+  Ether-S-Bus-Header von den gesendeten Werten abwichen. Echte PCDs tun das
+  zum Teil, dann ließ sich die PCD nicht mehr einrichten
+  („Einrichtungsfehler, wird erneut versucht“). Diese Felder werden nicht mehr
+  zur Prüfung verwendet; Länge, CRC und Sequenznummer reichen aus.
+- Die Meldung beim Einrichtungsfehler enthält jetzt die Ursache.
+
 ## [0.4.4] - 2026-11-05
 
 Enthält die unten für 0.4.3 beschriebenen Änderungen. Das Release v0.4.3
