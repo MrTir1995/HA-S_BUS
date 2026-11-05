@@ -6,7 +6,7 @@
   "documentation": "https://github.com/MrTir1995/HA-S_BUS",
   "issue_tracker": "https://github.com/MrTir1995/HA-S_BUS/issues",
   "requirements": ["serialx>=1.0.0"],
-  "version": "0.4.3",
+  "version": "0.4.4",
   "iot_class": "local_push",
   "integration_type": "hub",
   "zeroconf": [

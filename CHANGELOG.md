@@ -12,6 +12,11 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Unterstützung für Timer und Counter Entitäten
 - Diagnostics Support
 
+## [0.4.4] - 2026-11-05
+
+Enthält die unten für 0.4.3 beschriebenen Änderungen. Das Release v0.4.3
+wurde versehentlich vor dem Merge angelegt und enthält den Stand von 0.4.2.
+
 ## [0.4.3] - 2026-11-05
 
 ### Behoben
