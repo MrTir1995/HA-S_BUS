@@ -12,6 +12,14 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Unterstützung für Timer und Counter Entitäten
 - Diagnostics Support
 
+## [0.4.6] - 2026-11-05
+
+### Geändert
+- README, Badges und Links in der Integration (Dokumentation, Fehlermeldungen
+  melden) zeigen auf dieses Repository statt auf das nicht mehr gepflegte
+  Original. Fork-Hinweis und Umstiegsanleitung für HACS ergänzt.
+- Systemregister-Tabelle im README korrigiert.
+
 ## [0.4.5] - 2026-11-05
 
 ### Behoben
@@ -200,5 +208,13 @@ wurde versehentlich vor dem Merge angelegt und enthält den Stand von 0.4.2.
 - Type Hints für alle Funktionen
 - Logging und Error Handling
 
-[Unreleased]: https://github.com/MrTir1995/HA-S_BUS/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jfmennedy/HA-S_BUS/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/jfmennedy/HA-S_BUS/releases/tag/v0.4.6
+[0.4.5]: https://github.com/jfmennedy/HA-S_BUS/releases/tag/v0.4.5
+[0.4.4]: https://github.com/jfmennedy/HA-S_BUS/releases/tag/v0.4.4
+[0.4.2]: https://github.com/jfmennedy/HA-S_BUS/releases/tag/v0.4.2
+[0.4.1]: https://github.com/jfmennedy/HA-S_BUS/releases/tag/v0.4.1
+[0.4.0]: https://github.com/jfmennedy/HA-S_BUS/releases/tag/v0.4.0
+[0.3.2]: https://github.com/jfmennedy/HA-S_BUS/releases/tag/v0.3.2
+[0.3.1]: https://github.com/jfmennedy/HA-S_BUS/releases/tag/v0.3.1
 [0.1.0]: https://github.com/MrTir1995/HA-S_BUS/releases/tag/v0.1.0
