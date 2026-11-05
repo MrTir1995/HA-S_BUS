@@ -9,6 +9,14 @@
 
 **Diese Integration ermöglicht die Kommunikation mit SAIA PCD Steuerungen über das S-Bus Protokoll in Home Assistant.**
 
+> [!NOTE]
+> Dies ist ein gepflegter Fork von [MrTir1995/HA-S_BUS](https://github.com/MrTir1995/HA-S_BUS),
+> das seit Längerem nicht mehr aktualisiert wird. Gegenüber dem Original
+> funktioniert hier die Ether-S-Bus-Kommunikation mit echten PCDs (im Original
+> endet die Einrichtung mit „Timeout communicating with S-Bus device“), und
+> Register und Flags sind direkt in Home Assistant konfigurierbar.
+> Alle Änderungen stehen im [CHANGELOG](CHANGELOG.md).
+
 ## 🌟 Features
 
 - **Multi-Protokoll Support**: 
@@ -37,15 +45,24 @@ Diese Integration unterstützt SAIA PCD Steuerungen mit S-Bus Schnittstelle, ein
 
 ### HACS (Empfohlen)
 
+[![In HACS öffnen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jfmennedy&repository=HA-S_BUS&category=integration)
+
+Oder manuell:
+
 1. Öffnen Sie HACS in Home Assistant
 2. Klicken Sie auf "Integrations"
 3. Klicken Sie auf das Menü (⋮) in der oberen rechten Ecke
 4. Wählen Sie "Custom repositories"
-5. Fügen Sie die Repository-URL hinzu: `https://github.com/MrTir1995/HA-S_BUS`
+5. Fügen Sie die Repository-URL hinzu: `https://github.com/jfmennedy/HA-S_BUS`
 6. Wählen Sie die Kategorie "Integration"
 7. Klicken Sie auf "ADD"
 8. Suchen Sie nach "SAIA S-Bus"
 9. Klicken Sie auf "Download"
+
+**Umstieg vom Original-Repository:** In HACS das Repository von MrTir1995
+entfernen, dieses Repository wie oben hinzufügen, die Integration
+herunterladen und Home Assistant neu starten. Weil beide Varianten dieselbe
+Integration (`sbus`) sind, bleibt eine bestehende Einrichtung erhalten.
 
 ### Manuelle Installation
 
@@ -186,13 +203,17 @@ Diese Integration implementiert alle drei SAIA S-Bus Protokoll-Varianten:
 
 ### Systemregister
 
-Die Integration liest automatisch Geräte-Informationen aus den Systemregistern:
+Beim Einrichten werden diese Systemregister gelesen:
 
-- **R600-R604**: Seriennummer (ASCII)
-- **R605-R611**: Produkttyp (ASCII)
-- **R612**: Hardware-Version
-- **R614**: Firmware-Version (formatiert als Major.Minor.Patch)
-- **R621**: Protokoll-Version
+| Register | Inhalt | Pflicht |
+|---|---|---|
+| R 600 | Firmware-Version (Major.Minor.Patch) | ja – prüft, ob die PCD antwortet |
+| R 605–608 | Produkttyp (ASCII, z. B. „PCD3.M5360“) | nein |
+| R 609 | Hardware-Version | nein |
+| R 611–612 | Seriennummer | nein |
+
+Antwortet die PCD auf ein optionales Register nicht, wird es übersprungen.
+Ohne Seriennummer dient IP-Adresse, Port und Station als Gerätekennung.
 
 ### Architektur
 
@@ -225,6 +246,8 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) f�
 
 ## 🙏 Danksagung
 
+- [MrTir1995](https://github.com/MrTir1995) für die ursprüngliche Integration
+
 - [SAIA-Burgess Controls](https://www.saia-pcd.com/) für das S-Bus Protokoll
 - [Home Assistant Community](https://www.home-assistant.io/) für das großartige Framework
 - [digimat.saia](https://github.com/digimat/digimat-saia) für die Python S-Bus Referenzimplementierung
@@ -233,16 +256,16 @@ Dieses Projekt ist unter der MIT-Lizenz lizenziert - siehe [LICENSE](LICENSE) f�
 
 Bei Problemen oder Fragen:
 
-- Öffnen Sie ein [Issue auf GitHub](https://github.com/MrTir1995/HA-S_BUS/issues)
+- Öffnen Sie ein [Issue auf GitHub](https://github.com/jfmennedy/HA-S_BUS/issues)
 - Diskutieren Sie im [Home Assistant Forum](https://community.home-assistant.io/)
 
 ---
 
-[commits-shield]: https://img.shields.io/github/commit-activity/y/MrTir1995/HA-S_BUS.svg?style=for-the-badge
-[commits]: https://github.com/MrTir1995/HA-S_BUS/commits/main
+[commits-shield]: https://img.shields.io/github/commit-activity/y/jfmennedy/HA-S_BUS.svg?style=for-the-badge
+[commits]: https://github.com/jfmennedy/HA-S_BUS/commits/main
 [hacs]: https://github.com/hacs/integration
 [hacsbadge]: https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge
-[license-shield]: https://img.shields.io/github/license/MrTir1995/HA-S_BUS.svg?style=for-the-badge
-[maintenance-shield]: https://img.shields.io/badge/maintainer-MrTir1995-blue.svg?style=for-the-badge
-[releases-shield]: https://img.shields.io/github/release/MrTir1995/HA-S_BUS.svg?style=for-the-badge
-[releases]: https://github.com/MrTir1995/HA-S_BUS/releases
+[license-shield]: https://img.shields.io/github/license/jfmennedy/HA-S_BUS.svg?style=for-the-badge
+[maintenance-shield]: https://img.shields.io/badge/maintainer-jfmennedy-blue.svg?style=for-the-badge
+[releases-shield]: https://img.shields.io/github/v/release/jfmennedy/HA-S_BUS.svg?style=for-the-badge
+[releases]: https://github.com/jfmennedy/HA-S_BUS/releases

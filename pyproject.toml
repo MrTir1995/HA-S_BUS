@@ -4,14 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "homeassistant-sbus"
-version = "0.4.5"
+version = "0.4.6"
 description = "SAIA S-Bus integration for Home Assistant"
 readme = "README.md"
 requires-python = ">=3.13"
 license = {text = "MIT"}
 keywords = ["home-assistant", "sbus", "saia", "automation"]
 authors = [
-  {name = "MrTir1995"}
+  {name = "MrTir1995"},
+  {name = "jfmennedy"}
 ]
 classifiers = [
   "Development Status :: 4 - Beta",
@@ -23,8 +24,8 @@ classifiers = [
 ]
 
 [project.urls]
-"Bug Reports" = "https://github.com/MrTir1995/HA-S_BUS/issues"
-"Source" = "https://github.com/MrTir1995/HA-S_BUS"
+"Bug Reports" = "https://github.com/jfmennedy/HA-S_BUS/issues"
+"Source" = "https://github.com/jfmennedy/HA-S_BUS"
 
 [tool.setuptools]
 platforms = ["any"]
