@@ -12,6 +12,16 @@ und dieses Projekt folgt [Semantic Versioning](https://semver.org/lang/de/).
 - Unterstützung für Timer und Counter Entitäten
 - Diagnostics Support
 
+## [0.4.3] - 2026-11-05
+
+### Geändert
+- `pyserial-asyncio` durch `serialx` ersetzt, wie von Home Assistant
+  gefordert (die alte Bibliothek funktioniert ab Home Assistant 2027.2 nicht
+  mehr). Behebt die Warnung beim Start.
+- Ist die PCD nicht erreichbar, erscheint nur noch ein Eintrag im Log beim
+  Ausfall und einer bei der Erholung, statt einer Fehlermeldung pro
+  Abfragezyklus.
+
 ## [0.4.2] - 2026-11-04
 
 ### Behoben

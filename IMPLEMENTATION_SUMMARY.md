@@ -77,10 +77,10 @@ Die SAIA S-Bus Integration wurde erweitert, um alle drei S-Bus-Protokollvariante
 
 ### `manifest.json`
 - Version erhöht: `0.1.0` → `0.2.0`
-- Abhängigkeit hinzugefügt: `pyserial-asyncio==0.6`
+- Abhängigkeit hinzugefügt: `serialx>=1.0.0` (ersetzt `pyserial-asyncio`)
 
 ### `requirements.txt`
-- `pyserial-asyncio==0.6` hinzugefügt
+- `serialx>=1.0.0` (ersetzt `pyserial-asyncio`) hinzugefügt
 
 ## Architektur
 
@@ -188,6 +188,6 @@ protocol = create_sbus_protocol(config)
 
 ## Bekannte Einschränkungen
 
-- **Serial-S-Bus**: Erfordert `pyserial-asyncio` (automatisch installiert)
+- **Serial-S-Bus**: Erfordert `serialx` (automatisch installiert)
 - **Profi-S-Bus**: Gateway-spezifische Implementierung ist Platzhalter
 - **Tests**: Müssen noch für neue Protokolle erweitert werden

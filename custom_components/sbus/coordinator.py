@@ -85,7 +85,7 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             # Check if we need to reconnect
             if not self._is_connected or self._consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
-                _LOGGER.info("Attempting to reconnect to S-Bus device...")
+                _LOGGER.debug("Attempting to reconnect to S-Bus device")
                 await self._async_reconnect()
 
             data: dict[str, Any] = {
@@ -125,8 +125,13 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         except SBusTimeoutError as err:
             self._consecutive_errors += 1
-            msg = f"Timeout communicating with S-Bus device: {err}"
-            _LOGGER.warning(
+            # The DataUpdateCoordinator logs this once when the PCD becomes
+            # unavailable and once when it recovers, so no per-poll logging.
+            msg = (
+                f"{err}. Check IP, port, S-Bus station number and that "
+                "Ether-S-Bus is enabled on the PCD"
+            )
+            _LOGGER.debug(
                 "%s (consecutive errors: %d/%d)",
                 msg,
                 self._consecutive_errors,
@@ -136,7 +141,7 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except SBusProtocolError as err:
             self._consecutive_errors += 1
             msg = f"Error communicating with S-Bus device: {err}"
-            _LOGGER.warning(
+            _LOGGER.debug(
                 "%s (consecutive errors: %d/%d)",
                 msg,
                 self._consecutive_errors,
@@ -160,7 +165,7 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
             # Attempt to reconnect
             await self.protocol.connect()
-            _LOGGER.info("Successfully reconnected to S-Bus device")
+            _LOGGER.debug("Reconnected to S-Bus device")
 
             # Clear cached device info to refresh it
             self._device_info = None
@@ -169,7 +174,7 @@ class SBusDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         except Exception as err:
             self._is_connected = False
-            _LOGGER.error("Failed to reconnect to S-Bus device: %s", err)
+            _LOGGER.debug("Failed to reconnect to S-Bus device: %s", err)
             raise UpdateFailed(f"Reconnection failed: {err}") from err
 
     async def async_get_device_info(self) -> dict[str, Any]:

@@ -72,22 +72,20 @@ class SerialSBusProtocol(SBusProtocolBase):
     async def _connect_serial(self) -> None:
         """Establish direct serial connection."""
         try:
-            import serial_asyncio
+            import serialx  # noqa: PLC0415
         except ImportError as err:
-            msg = "pyserial-asyncio is required for serial connections"
+            msg = "serialx is required for serial connections"
             raise ImportError(msg) from err
 
-        # Open serial port (SerialException is an OSError)
+        # serialx defaults to 8 data bits, no parity, 1 stop bit, which is what
+        # S-Bus data mode (SM2) needs; only url and baudrate are passed so the
+        # call works with every serialx release since 1.0.
         try:
-            self._reader, self._writer = await serial_asyncio.open_serial_connection(
+            self._reader, self._writer = await serialx.open_serial_connection(
                 url=self.port,
                 baudrate=self.baudrate,
-                bytesize=8,
-                parity="N",  # Data mode (SM2) uses 8N1, parity is only used in parity mode
-                stopbits=1,
-                timeout=self.timeout,
             )
-        except OSError as err:
+        except (OSError, serialx.SerialException) as err:
             msg = f"Could not open serial port {self.port}: {err}"
             raise SBusConnectionError(msg) from err
 
